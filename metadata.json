@@ -1,0 +1,6 @@
+{
+  "name": "Folder Stripper & Structure PDF Architect",
+  "description": "Desktop app to flatten folders, strip nested directories into files, and generate comprehensive directory structure PDFs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
