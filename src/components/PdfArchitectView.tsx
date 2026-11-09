@@ -1,29 +1,62 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+} from "react";
 import {
-  FileText,
   Download,
   Settings2,
   RefreshCw,
   Palette,
   Eye,
-  Sparkles,
   ExternalLink,
   ZoomIn,
   ZoomOut,
   ImageIcon,
-  CheckCircle,
-} from 'lucide-react';
-import { FolderAnalysisStats, FolderNode, PdfOptions, ProcessedFile } from '../types';
-import { generateFolderPdf, getPdfBlobUrl, downloadPdf } from '../utils/pdfGenerator';
-import { formatBytes, formatDate } from '../utils/fileHelpers';
-import { generateTreeText, flattenDirectoryInventory } from '../utils/treeBuilder';
-import { downloadElementAsImage } from '../utils/imageExporter';
+  Type,
+} from "lucide-react";
+import {
+  FolderAnalysisStats,
+  FolderNode,
+  PdfOptions,
+  PdfTreeFont,
+  ProcessedFile,
+} from "../types";
+import {
+  generateFolderPdf,
+  getPdfBlobUrl,
+  downloadPdf,
+} from "../utils/pdfGenerator";
+import { formatBytes, formatDate } from "../utils/fileHelpers";
+import {
+  generateTreeText,
+  flattenDirectoryInventory,
+} from "../utils/treeBuilder";
+import { downloadElementAsImage } from "../utils/imageExporter";
+import { PdfCanvasViewer } from "./PdfCanvasViewer";
 
 interface PdfArchitectViewProps {
   rootNode: FolderNode;
   stats: FolderAnalysisStats;
   files: ProcessedFile[];
 }
+
+const PDF_REGEN_DEBOUNCE_MS = 350;
+
+/** Sheet-view equivalents of the PDF font choices (fonts available in the app). */
+const SHEET_FONT_MAP: Record<PdfTreeFont, string> = {
+  mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+  sans: "var(--font-sans)",
+  serif: 'Georgia, "Times New Roman", Times, serif',
+};
+
+const TREE_FONT_OPTIONS: { id: PdfTreeFont; label: string }[] = [
+  { id: "sans", label: "Sans" },
+  { id: "mono", label: "Mono" },
+  { id: "serif", label: "Serif" },
+];
 
 export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
   rootNode,
@@ -37,12 +70,19 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
     includeInventoryTable: true,
     includeSizes: true,
     includeDates: true,
-    treeStyle: 'standard',
-    themeColor: 'blue',
+    treeStyle: "standard",
+    themeColor: "blue",
+    treeFont: "sans",
+    treeFontSize: 9.5,
   });
 
-  const [previewMode, setPreviewMode] = useState<'sheet' | 'native'>('sheet');
+  const [previewMode, setPreviewMode] = useState<"sheet" | "native">("sheet");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
+  const [pdfMeta, setPdfMeta] = useState<{
+    pages: number;
+    sizeKb: number;
+  } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
@@ -50,61 +90,104 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
   const currentBlobUrlRef = useRef<string | null>(null);
   const documentSheetRef = useRef<HTMLDivElement>(null);
 
-  // Generate real PDF blob
-  const refreshPdf = () => {
+  // Generate the real PDF (blob URL for "open in new tab" + bytes for the canvas viewer).
+  const refreshPdf = useCallback(() => {
     setIsGenerating(true);
     try {
       const doc = generateFolderPdf(rootNode, stats, files, pdfOptions);
       const url = getPdfBlobUrl(doc);
+      const buffer = doc.output("arraybuffer");
 
       if (currentBlobUrlRef.current) {
         URL.revokeObjectURL(currentBlobUrlRef.current);
       }
       currentBlobUrlRef.current = url;
       setPreviewUrl(url);
+      setPdfData(buffer);
+      setPdfMeta({
+        pages: doc.getNumberOfPages(),
+        sizeKb: Math.max(1, Math.round(buffer.byteLength / 1024)),
+      });
     } catch (err) {
-      console.error('Failed to generate PDF:', err);
+      console.error("Failed to generate PDF:", err);
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [rootNode, stats, files, pdfOptions]);
 
+  // Debounce regeneration so typing in the settings panel doesn't rebuild
+  // the whole document (and re-render every page) on every keystroke.
   useEffect(() => {
-    refreshPdf();
+    const timer = window.setTimeout(refreshPdf, PDF_REGEN_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [refreshPdf]);
+
+  // Revoke the blob URL on unmount.
+  useEffect(() => {
     return () => {
       if (currentBlobUrlRef.current) {
         URL.revokeObjectURL(currentBlobUrlRef.current);
       }
     };
-  }, [pdfOptions, rootNode, stats, files]);
+  }, []);
 
   const handleDownloadPdf = () => {
     const doc = generateFolderPdf(rootNode, stats, files, pdfOptions);
-    const dateStr = new Date().toISOString().split('T')[0];
-    const safeName = stats.rootName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const dateStr = new Date().toISOString().split("T")[0];
+    const safeName = stats.rootName.replace(/[^a-zA-Z0-9_-]/g, "_");
     downloadPdf(doc, `${safeName}_structure_${dateStr}.pdf`);
   };
 
-  const handleDownloadImage = async (format: 'png' | 'jpeg' = 'png') => {
-    if (!documentSheetRef.current || isExportingImage) return;
+  const handleDownloadImage = async (format: "png" | "jpeg" = "png") => {
+    if (isExportingImage) return;
+
+    // The image is rendered from the sheet DOM node — switch to sheet view
+    // first if the user exports from the PDF viewer.
+    if (previewMode !== "sheet" || !documentSheetRef.current) {
+      setPreviewMode("sheet");
+      window.setTimeout(() => {
+        void handleDownloadImage(format);
+      }, 150);
+      return;
+    }
 
     setIsExportingImage(true);
     const element = documentSheetRef.current;
     const originalTransform = element.style.transform;
     try {
-      element.style.transform = 'none';
-      const dateStr = new Date().toISOString().split('T')[0];
-      const safeName = stats.rootName.replace(/[^a-zA-Z0-9_-]/g, '_');
+      element.style.transform = "none";
+      const dateStr = new Date().toISOString().split("T")[0];
+      const safeName = stats.rootName.replace(/[^a-zA-Z0-9_-]/g, "_");
       await downloadElementAsImage(
         element,
         `${safeName}_structure_${dateStr}.${format}`,
-        format
+        format,
       );
     } catch (err) {
-      console.error('Failed to export image:', err);
+      console.error("Failed to export image:", err);
     } finally {
       element.style.transform = originalTransform;
       setIsExportingImage(false);
+    }
+  };
+
+  // Mode-aware zoom bounds: the PDF viewer re-renders canvases at any scale,
+  // while the sheet scales via CSS transform.
+  const minZoom = previewMode === "native" ? 50 : 70;
+  const maxZoom = previewMode === "native" ? 200 : 130;
+
+  useEffect(() => {
+    setZoomLevel((z) => Math.min(Math.max(z, minZoom), maxZoom));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewMode]);
+
+  const zoomIn = () => setZoomLevel((z) => Math.min(maxZoom, z + 10));
+  const zoomOut = () => setZoomLevel((z) => Math.max(minZoom, z - 10));
+  const resetZoom = () => setZoomLevel(100);
+
+  const handleOpenExternal = () => {
+    if (previewUrl) {
+      window.open(previewUrl, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -113,7 +196,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
     return generateTreeText(rootNode, {
       includeSizes: pdfOptions.includeSizes,
       includeFiles: true,
-      style: 'unicode',
+      style: "unicode",
     });
   }, [rootNode, pdfOptions.includeSizes]);
 
@@ -123,32 +206,32 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
 
   const themeColors = {
     blue: {
-      bg: 'bg-blue-600',
-      border: 'border-blue-500',
-      text: 'text-blue-600',
-      pill: 'bg-blue-50 text-blue-700',
-      headerBg: '#2563eb',
+      bg: "bg-blue-600",
+      border: "border-blue-500",
+      text: "text-blue-600",
+      pill: "bg-blue-50 text-blue-700",
+      headerBg: "#2563eb",
     },
     indigo: {
-      bg: 'bg-indigo-600',
-      border: 'border-indigo-500',
-      text: 'text-indigo-600',
-      pill: 'bg-indigo-50 text-indigo-700',
-      headerBg: '#4f46e5',
+      bg: "bg-indigo-600",
+      border: "border-indigo-500",
+      text: "text-indigo-600",
+      pill: "bg-indigo-50 text-indigo-700",
+      headerBg: "#4f46e5",
     },
     emerald: {
-      bg: 'bg-emerald-600',
-      border: 'border-emerald-500',
-      text: 'text-emerald-600',
-      pill: 'bg-emerald-50 text-emerald-700',
-      headerBg: '#059669',
+      bg: "bg-emerald-600",
+      border: "border-emerald-500",
+      text: "text-emerald-600",
+      pill: "bg-emerald-50 text-emerald-700",
+      headerBg: "#059669",
     },
     amber: {
-      bg: 'bg-amber-600',
-      border: 'border-amber-500',
-      text: 'text-amber-600',
-      pill: 'bg-amber-50 text-amber-700',
-      headerBg: '#d97706',
+      bg: "bg-amber-600",
+      border: "border-amber-500",
+      text: "text-amber-600",
+      pill: "bg-amber-50 text-amber-700",
+      headerBg: "#d97706",
     },
   }[pdfOptions.themeColor];
 
@@ -162,8 +245,12 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               <Settings2 className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-100">PDF & Image Settings</h2>
-              <p className="text-[11px] text-slate-400">Configure layout, sections & export</p>
+              <h2 className="text-sm font-semibold text-slate-100">
+                PDF & Image Settings
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                Configure layout, sections & export
+              </p>
             </div>
           </div>
 
@@ -174,7 +261,9 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
             title="Refresh preview"
           >
-            <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`w-4 h-4 ${isGenerating ? "animate-spin" : ""}`}
+            />
           </button>
         </div>
 
@@ -188,8 +277,8 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
             <input
               type="text"
               value={pdfOptions.title}
-              onChange={e =>
-                setPdfOptions(prev => ({ ...prev, title: e.target.value }))
+              onChange={(e) =>
+                setPdfOptions((prev) => ({ ...prev, title: e.target.value }))
               }
               className="w-full px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800 text-slate-200 focus:outline-none focus:border-emerald-500"
             />
@@ -203,32 +292,97 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
             </label>
             <div className="grid grid-cols-4 gap-2">
               {[
-                { id: 'blue', label: 'Blue', color: 'bg-blue-600' },
-                { id: 'indigo', label: 'Indigo', color: 'bg-indigo-600' },
-                { id: 'emerald', label: 'Emerald', color: 'bg-emerald-600' },
-                { id: 'amber', label: 'Amber', color: 'bg-amber-600' },
-              ].map(th => (
+                { id: "blue", label: "Blue", color: "bg-blue-600" },
+                { id: "indigo", label: "Indigo", color: "bg-indigo-600" },
+                { id: "emerald", label: "Emerald", color: "bg-emerald-600" },
+                { id: "amber", label: "Amber", color: "bg-amber-600" },
+              ].map((th) => (
                 <button
                   key={th.id}
                   type="button"
                   onClick={() =>
-                    setPdfOptions(prev => ({
+                    setPdfOptions((prev) => ({
                       ...prev,
                       themeColor: th.id as any,
                     }))
                   }
                   className={`flex items-center space-x-1.5 p-2 rounded-xl border transition-all ${
                     pdfOptions.themeColor === th.id
-                      ? 'border-emerald-400 bg-slate-800 shadow-sm'
-                      : 'border-slate-800 bg-slate-950/60 hover:bg-slate-800'
+                      ? "border-emerald-400 bg-slate-800 shadow-sm"
+                      : "border-slate-800 bg-slate-950/60 hover:bg-slate-800"
                   }`}
                 >
-                  <span className={`w-3.5 h-3.5 rounded-full ${th.color} shrink-0`} />
+                  <span
+                    className={`w-3.5 h-3.5 rounded-full ${th.color} shrink-0`}
+                  />
                   <span className="text-[11px] font-medium text-slate-300">
                     {th.label}
                   </span>
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Typography */}
+          <div className="space-y-3 pt-2 border-t border-slate-800">
+            <span className="block text-slate-400 font-semibold text-[11px] uppercase tracking-wider flex items-center space-x-1.5">
+              <Type className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Tree Typography</span>
+            </span>
+
+            {/* Font family */}
+            <div className="grid grid-cols-3 gap-2">
+              {TREE_FONT_OPTIONS.map((font) => (
+                <button
+                  key={font.id}
+                  type="button"
+                  onClick={() =>
+                    setPdfOptions((prev) => ({ ...prev, treeFont: font.id }))
+                  }
+                  className={`p-2 rounded-xl border text-center transition-all ${
+                    pdfOptions.treeFont === font.id
+                      ? "border-emerald-500 bg-emerald-950/30 text-emerald-300 font-semibold"
+                      : "border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <span
+                    className="block text-sm leading-tight"
+                    style={{ fontFamily: SHEET_FONT_MAP[font.id] }}
+                  >
+                    Ag
+                  </span>
+                  <span className="block text-[10px] mt-0.5">{font.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Font size */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-slate-300 font-medium">Font Size</span>
+                <span className="font-mono text-[11px] text-emerald-400">
+                  {pdfOptions.treeFontSize.toFixed(1)} pt
+                </span>
+              </div>
+              <input
+                type="range"
+                min={7}
+                max={14}
+                step={0.5}
+                value={pdfOptions.treeFontSize}
+                onChange={(e) =>
+                  setPdfOptions((prev) => ({
+                    ...prev,
+                    treeFontSize: Number(e.target.value),
+                  }))
+                }
+                aria-label="Tree font size in points"
+                className="w-full h-1.5 rounded-full bg-slate-800 accent-emerald-500 cursor-pointer"
+              />
+              <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1 font-mono">
+                <span>7 pt</span>
+                <span>14 pt</span>
+              </div>
             </div>
           </div>
 
@@ -250,8 +404,8 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               <input
                 type="checkbox"
                 checked={pdfOptions.includeStats}
-                onChange={e =>
-                  setPdfOptions(prev => ({
+                onChange={(e) =>
+                  setPdfOptions((prev) => ({
                     ...prev,
                     includeStats: e.target.checked,
                   }))
@@ -266,14 +420,14 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                   Visual Hierarchy Tree
                 </span>
                 <span className="block text-[11px] text-slate-400">
-                  Formatted directory branch lines and file sizes
+                  Vector branch guides with color-coded directories
                 </span>
               </div>
               <input
                 type="checkbox"
                 checked={pdfOptions.includeTree}
-                onChange={e =>
-                  setPdfOptions(prev => ({
+                onChange={(e) =>
+                  setPdfOptions((prev) => ({
                     ...prev,
                     includeTree: e.target.checked,
                   }))
@@ -294,8 +448,8 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               <input
                 type="checkbox"
                 checked={pdfOptions.includeInventoryTable}
-                onChange={e =>
-                  setPdfOptions(prev => ({
+                onChange={(e) =>
+                  setPdfOptions((prev) => ({
                     ...prev,
                     includeInventoryTable: e.target.checked,
                   }))
@@ -316,8 +470,8 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               <input
                 type="checkbox"
                 checked={pdfOptions.includeSizes}
-                onChange={e =>
-                  setPdfOptions(prev => ({
+                onChange={(e) =>
+                  setPdfOptions((prev) => ({
                     ...prev,
                     includeSizes: e.target.checked,
                   }))
@@ -331,8 +485,8 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               <input
                 type="checkbox"
                 checked={pdfOptions.includeDates}
-                onChange={e =>
-                  setPdfOptions(prev => ({
+                onChange={(e) =>
+                  setPdfOptions((prev) => ({
                     ...prev,
                     includeDates: e.target.checked,
                   }))
@@ -345,18 +499,18 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
           {/* Tree Style */}
           <div className="pt-2 border-t border-slate-800">
             <label className="block text-slate-300 font-medium mb-1.5">
-              Tree Font Density
+              Tree Row Density
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() =>
-                  setPdfOptions(prev => ({ ...prev, treeStyle: 'standard' }))
+                  setPdfOptions((prev) => ({ ...prev, treeStyle: "standard" }))
                 }
                 className={`p-2 rounded-xl border text-center transition-all ${
-                  pdfOptions.treeStyle === 'standard'
-                    ? 'border-emerald-500 bg-emerald-950/30 text-emerald-300 font-semibold'
-                    : 'border-slate-800 bg-slate-950 text-slate-400'
+                  pdfOptions.treeStyle === "standard"
+                    ? "border-emerald-500 bg-emerald-950/30 text-emerald-300 font-semibold"
+                    : "border-slate-800 bg-slate-950 text-slate-400"
                 }`}
               >
                 Standard
@@ -364,12 +518,12 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               <button
                 type="button"
                 onClick={() =>
-                  setPdfOptions(prev => ({ ...prev, treeStyle: 'compact' }))
+                  setPdfOptions((prev) => ({ ...prev, treeStyle: "compact" }))
                 }
                 className={`p-2 rounded-xl border text-center transition-all ${
-                  pdfOptions.treeStyle === 'compact'
-                    ? 'border-emerald-500 bg-emerald-950/30 text-emerald-300 font-semibold'
-                    : 'border-slate-800 bg-slate-950 text-slate-400'
+                  pdfOptions.treeStyle === "compact"
+                    ? "border-emerald-500 bg-emerald-950/30 text-emerald-300 font-semibold"
+                    : "border-slate-800 bg-slate-950 text-slate-400"
                 }`}
               >
                 Compact
@@ -382,12 +536,16 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
         <div className="p-4 border-t border-slate-800 bg-slate-900/90 space-y-2">
           <button
             type="button"
-            onClick={() => handleDownloadImage('png')}
+            onClick={() => handleDownloadImage("png")}
             disabled={isExportingImage}
             className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition-all shadow-md shadow-indigo-600/30 active:scale-98 disabled:opacity-50"
           >
             <ImageIcon className="w-4 h-4" />
-            <span>{isExportingImage ? 'Generating PNG...' : 'Download as Image (PNG)'}</span>
+            <span>
+              {isExportingImage
+                ? "Generating PNG..."
+                : "Download as Image (PNG)"}
+            </span>
           </button>
 
           <button
@@ -417,65 +575,100 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
             <div className="flex items-center bg-slate-950 rounded-lg p-0.5 border border-slate-800 text-xs">
               <button
                 type="button"
-                onClick={() => setPreviewMode('sheet')}
+                onClick={() => setPreviewMode("sheet")}
                 className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                  previewMode === 'sheet'
-                    ? 'bg-slate-800 text-slate-100 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                  previewMode === "sheet"
+                    ? "bg-slate-800 text-slate-100 shadow-sm"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 Page Sheet View
               </button>
               <button
                 type="button"
-                onClick={() => setPreviewMode('native')}
+                onClick={() => setPreviewMode("native")}
                 className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                  previewMode === 'native'
-                    ? 'bg-slate-800 text-slate-100 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                  previewMode === "native"
+                    ? "bg-slate-800 text-slate-100 shadow-sm"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                Native PDF Embed
+                PDF Viewer
               </button>
             </div>
+
+            {/* PDF metadata pill */}
+            {previewMode === "native" && pdfMeta && (
+              <span className="hidden md:inline-flex items-center space-x-1.5 text-[10px] font-mono text-slate-400 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800">
+                <span>
+                  {pdfMeta.pages} page{pdfMeta.pages !== 1 ? "s" : ""}
+                </span>
+                <span className="text-slate-600">•</span>
+                <span>{pdfMeta.sizeKb} KB</span>
+                <span className="text-slate-600">•</span>
+                <span className="text-emerald-400/80">A4 Vector</span>
+              </span>
+            )}
           </div>
 
           <div className="flex items-center space-x-2">
-            {previewMode === 'sheet' && (
-              <div className="flex items-center space-x-1 bg-slate-850 px-2 py-1 rounded-lg border border-slate-800 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setZoomLevel(prev => Math.max(70, prev - 10))}
-                  className="p-0.5 text-slate-400 hover:text-slate-200"
-                  title="Zoom out"
-                >
-                  <ZoomOut className="w-3.5 h-3.5" />
-                </button>
-                <span className="font-mono text-[11px] text-slate-300 px-1">
-                  {zoomLevel}%
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setZoomLevel(prev => Math.min(130, prev + 10))}
-                  className="p-0.5 text-slate-400 hover:text-slate-200"
-                  title="Zoom in"
-                >
-                  <ZoomIn className="w-3.5 h-3.5" />
-                </button>
-              </div>
+            {/* Zoom controls — sheet scales via CSS, PDF viewer re-renders canvases */}
+            <div className="flex items-center space-x-1 bg-slate-850 px-2 py-1 rounded-lg border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={zoomOut}
+                disabled={zoomLevel <= minZoom}
+                className="p-0.5 text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                title="Zoom out"
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={resetZoom}
+                className="font-mono text-[11px] text-slate-300 px-1 hover:text-white transition-colors"
+                title="Reset zoom to 100%"
+              >
+                {zoomLevel}%
+              </button>
+              <button
+                type="button"
+                onClick={zoomIn}
+                disabled={zoomLevel >= maxZoom}
+                className="p-0.5 text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                title="Zoom in"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Open the raw PDF in a new browser tab */}
+            {previewMode === "native" && (
+              <button
+                type="button"
+                onClick={handleOpenExternal}
+                disabled={!previewUrl}
+                aria-label="Open PDF in new tab"
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors disabled:opacity-40"
+                title="Open the generated PDF in a new browser tab"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
             )}
 
             {/* Download as Image */}
             <button
               type="button"
-              onClick={() => handleDownloadImage('png')}
+              onClick={() => handleDownloadImage("png")}
               disabled={isExportingImage}
               aria-label="Download image version"
               className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-sm transition-all active:scale-95 disabled:opacity-50"
               title="Download structure report as high-resolution PNG image"
             >
               <ImageIcon className="w-3.5 h-3.5" />
-              <span>{isExportingImage ? 'Rendering Image...' : 'Download Image'}</span>
+              <span>
+                {isExportingImage ? "Rendering Image..." : "Download Image"}
+              </span>
             </button>
 
             {/* Download PDF */}
@@ -493,14 +686,20 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
         </div>
 
         {/* Preview Container */}
-        <div className="flex-1 p-4 sm:p-6 bg-slate-950 overflow-y-auto flex justify-center items-start">
-          {previewMode === 'sheet' ? (
+        <div
+          className={`flex-1 p-4 sm:p-6 bg-slate-950 ${
+            previewMode === "sheet"
+              ? "overflow-y-auto flex justify-center items-start"
+              : "overflow-hidden flex"
+          }`}
+        >
+          {previewMode === "sheet" ? (
             /* High-fidelity Vector Document Sheet matching the PDF and Image Export */
             <div
               ref={documentSheetRef}
               style={{
                 transform: `scale(${zoomLevel / 100})`,
-                transformOrigin: 'top center',
+                transformOrigin: "top center",
               }}
               className="w-full max-w-4xl bg-white text-slate-900 rounded-lg shadow-2xl p-8 sm:p-12 min-h-[1100px] border border-slate-300 font-sans transition-transform duration-150"
             >
@@ -560,13 +759,22 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                 </div>
               )}
 
-              {/* Visual Tree Diagram */}
+              {/* Visual Tree Diagram — mirrors the chosen PDF font + size so the
+                  sheet, image export and PDF all share the same typography. */}
               {pdfOptions.includeTree && (
                 <div className="mb-8">
                   <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200">
                     Directory Hierarchy Tree
                   </h3>
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 font-mono text-[11px] sm:text-xs text-slate-800 overflow-x-auto whitespace-pre leading-relaxed shadow-inner">
+                  <div
+                    className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-slate-800 overflow-x-auto whitespace-pre shadow-inner"
+                    style={{
+                      fontFamily: SHEET_FONT_MAP[pdfOptions.treeFont],
+                      fontSize: `${(pdfOptions.treeFontSize * 4) / 3}px`,
+                      lineHeight:
+                        pdfOptions.treeStyle === "compact" ? 1.45 : 1.7,
+                    }}
+                  >
                     {treeText}
                   </div>
                 </div>
@@ -580,7 +788,10 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                   </h3>
                   <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
                     <table className="w-full text-left text-xs">
-                      <thead style={{ backgroundColor: themeColors.headerBg }} className="text-white font-semibold">
+                      <thead
+                        style={{ backgroundColor: themeColors.headerBg }}
+                        className="text-white font-semibold"
+                      >
                         <tr>
                           <th className="py-2.5 px-3 w-8 text-center">#</th>
                           <th className="py-2.5 px-3">Directory Path</th>
@@ -590,12 +801,14 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                             <th className="py-2.5 px-3 text-right">Size</th>
                           )}
                           {pdfOptions.includeDates && (
-                            <th className="py-2.5 px-3 text-center">Last Modified</th>
+                            <th className="py-2.5 px-3 text-center">
+                              Last Modified
+                            </th>
                           )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 text-slate-700 font-mono text-[11px]">
-                        {inventory.map(item => (
+                        {inventory.map((item) => (
                           <tr key={item.index} className="hover:bg-slate-50">
                             <td className="py-2 px-3 text-center text-slate-400">
                               {item.index}
@@ -630,24 +843,20 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               {/* Document Footer */}
               <div className="mt-12 pt-4 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-400">
                 <span>MyProject Analyzer</span>
-                <span>Exportable as Vector PDF or High-Res Image (PNG/JPEG)</span>
+                <span>
+                  Exportable as Vector PDF or High-Res Image (PNG/JPEG)
+                </span>
               </div>
             </div>
           ) : (
-            /* Native PDF embed iframe */
-            <div className="w-full h-full max-w-5xl rounded-2xl overflow-hidden border border-slate-800 shadow-2xl bg-white min-h-[600px]">
-              {previewUrl ? (
-                <iframe
-                  src={`${previewUrl}#toolbar=0&view=FitH`}
-                  title="Folder Structure PDF Preview"
-                  className="w-full h-full min-h-[600px] border-0"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full p-8">
-                  <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mb-3" />
-                  <p className="text-slate-300 text-sm font-medium">Generating PDF preview...</p>
-                </div>
-              )}
+            /* PDF.js canvas viewer — the real generated document, fully zoomable,
+               with zero native-viewer chrome (no gray side rails/scrollbars) */
+            <div className="relative flex-1 w-full max-w-5xl mx-auto rounded-2xl overflow-hidden border border-slate-800 shadow-2xl bg-slate-900/40">
+              <PdfCanvasViewer
+                data={pdfData}
+                zoom={zoomLevel}
+                isRegenerating={isGenerating}
+              />
             </div>
           )}
         </div>

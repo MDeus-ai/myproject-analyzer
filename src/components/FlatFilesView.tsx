@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from "react";
 import {
   Search,
   Filter,
@@ -17,10 +17,11 @@ import {
   File,
   Copy,
   FolderOpen,
-} from 'lucide-react';
-import { CollisionStrategy, ProcessedFile } from '../types';
-import { formatBytes, formatDate, getFileCategory } from '../utils/fileHelpers';
-import { triggerFileDownload } from '../utils/zipExporter';
+} from "lucide-react";
+import { CollisionStrategy, ProcessedFile } from "../types";
+import { formatBytes, formatDate, getFileCategory } from "../utils/fileHelpers";
+import { triggerFileDownload } from "../utils/zipExporter";
+import { copyToClipboard } from "../utils/clipboard";
 
 interface FlatFilesViewProps {
   files: ProcessedFile[];
@@ -45,41 +46,40 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
   zipProgress,
   onOpenAnotherFolder,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'name' | 'size' | 'date' | 'ext'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"name" | "size" | "date" | "ext">(
+    "name",
+  );
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Filter and sort files
   const filteredFiles = useMemo(() => {
     return files
-      .filter(file => {
+      .filter((file) => {
         const matchesSearch =
-          file.flattenedName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          file.flattenedName
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase()) ||
           file.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           file.relativePath.toLowerCase().includes(searchQuery.toLowerCase()) ||
           file.extension.toLowerCase().includes(searchQuery.toLowerCase());
 
         if (!matchesSearch) return false;
-
-        if (selectedCategory === 'all') return true;
-        const cat = getFileCategory(file.name, file.type);
-        return cat === selectedCategory;
+        if (selectedCategory === "all") return true;
+        return getFileCategory(file.name, file.type) === selectedCategory;
       })
       .sort((a, b) => {
         let cmp = 0;
-        if (sortBy === 'name') {
+        if (sortBy === "name")
           cmp = a.flattenedName.localeCompare(b.flattenedName);
-        } else if (sortBy === 'size') {
-          cmp = a.size - b.size;
-        } else if (sortBy === 'date') {
-          cmp = a.lastModified - b.lastModified;
-        } else if (sortBy === 'ext') {
-          cmp = a.extension.localeCompare(b.extension);
-        }
-        return sortOrder === 'asc' ? cmp : -cmp;
+        else if (sortBy === "size") cmp = a.size - b.size;
+        else if (sortBy === "date") cmp = a.lastModified - b.lastModified;
+        else if (sortBy === "ext") cmp = a.extension.localeCompare(b.extension);
+        return sortOrder === "asc" ? cmp : -cmp;
       });
   }, [files, searchQuery, selectedCategory, sortBy, sortOrder]);
 
@@ -87,17 +87,14 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
     if (selectedFileIds.size === filteredFiles.length) {
       setSelectedFileIds(new Set());
     } else {
-      setSelectedFileIds(new Set(filteredFiles.map(f => f.id)));
+      setSelectedFileIds(new Set(filteredFiles.map((f) => f.id)));
     }
   };
 
   const toggleSelectFile = (id: string) => {
     const updated = new Set(selectedFileIds);
-    if (updated.has(id)) {
-      updated.delete(id);
-    } else {
-      updated.add(id);
-    }
+    if (updated.has(id)) updated.delete(id);
+    else updated.add(id);
     setSelectedFileIds(updated);
   };
 
@@ -105,30 +102,34 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
     if (file.blob) {
       triggerFileDownload(file.blob, file.flattenedName);
     } else if (file.textContent) {
-      const blob = new Blob([file.textContent], { type: file.type });
-      triggerFileDownload(blob, file.flattenedName);
+      triggerFileDownload(
+        new Blob([file.textContent], { type: file.type }),
+        file.flattenedName,
+      );
     }
   };
 
-  const handleCopyPath = (file: ProcessedFile) => {
-    navigator.clipboard.writeText(file.relativePath);
-    setCopiedId(file.id);
-    setTimeout(() => setCopiedId(null), 1500);
+  const handleCopyPath = async (file: ProcessedFile) => {
+    const succeeded = await copyToClipboard(file.relativePath);
+    if (succeeded) {
+      setCopiedId(file.id);
+      setTimeout(() => setCopiedId(null), 1500);
+    }
   };
 
   const getCategoryIcon = (file: ProcessedFile) => {
     const cat = getFileCategory(file.name, file.type);
     switch (cat) {
-      case 'code':
+      case "code":
         return <FileCode className="w-4 h-4 text-sky-400" />;
-      case 'image':
+      case "image":
         return <FileImage className="w-4 h-4 text-emerald-400" />;
-      case 'document':
+      case "document":
         return <FileTextIcon className="w-4 h-4 text-blue-400" />;
-      case 'audio':
-      case 'video':
+      case "audio":
+      case "video":
         return <FileAudio className="w-4 h-4 text-purple-400" />;
-      case 'data':
+      case "data":
         return <FileSpreadsheet className="w-4 h-4 text-amber-400" />;
       default:
         return <File className="w-4 h-4 text-slate-400" />;
@@ -136,86 +137,68 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-slate-100">
-      {/* Top Banner: Collision strategy & Stripping status */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 py-3 sm:px-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/20">
-              <FolderMinus className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="text-base font-semibold text-slate-100">
-                  Stripped Flat Files
-                </h1>
-                <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs font-mono font-medium">
-                  {files.length} total files
-                </span>
-                {collisionCount > 0 && (
-                  <span className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-medium border border-amber-500/30">
-                    <AlertTriangle className="w-3 h-3 text-amber-400" />
-                    <span>{collisionCount} name collision{collisionCount > 1 ? 's' : ''} resolved</span>
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                All nested directory paths have been stripped. Every file now exists at the root.
-              </p>
-            </div>
+    <div className="flex flex-col h-full bg-[var(--app-bg)] text-slate-100">
+      {/* Single consolidated toolbar */}
+      <div className="surface-header border-b border-chrome px-4 sm:px-5 py-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+        {/* Title group */}
+        <div className="flex items-center space-x-2.5 mr-2">
+          <div className="p-1.5 rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/25">
+            <FolderMinus className="w-4 h-4" />
           </div>
-
-          {/* Collision Resolution Settings */}
-          <div className="flex items-center space-x-2 bg-slate-950/80 p-1.5 rounded-xl border border-slate-800">
-            <label htmlFor="collision-select" className="text-xs text-slate-400 pl-2 font-medium">
-              Duplicate Handling:
-            </label>
-            <select
-              id="collision-select"
-              value={collisionStrategy}
-              onChange={e => onStrategyChange(e.target.value as CollisionStrategy)}
-              className="bg-slate-800 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-            >
-              <option value="enumerate">Auto-number: name (1).ext</option>
-              <option value="prefix-path">Prefix Path: folder_sub_name.ext</option>
-              <option value="overwrite">Overwrite / Keep Unique</option>
-            </select>
+          <div className="leading-tight">
+            <div className="flex items-center space-x-2">
+              <h1 className="text-sm font-semibold text-slate-100">
+                Stripped Flat Files
+              </h1>
+              <span className="px-1.5 py-0.5 rounded-full surface-raised border border-subtle text-slate-400 text-[10px] font-mono">
+                {files.length}
+              </span>
+              {collisionCount > 0 && (
+                <span className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 text-[10px] font-medium border border-amber-500/30">
+                  <AlertTriangle className="w-3 h-3 text-amber-400" />
+                  <span>
+                    {collisionCount} collision{collisionCount > 1 ? "s" : ""}{" "}
+                    resolved
+                  </span>
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Nested paths stripped — every file at root.
+            </p>
           </div>
         </div>
-      </div>
 
-      {/* Control bar: search, category filters, sorting, bulk download */}
-      <div className="p-4 sm:px-6 bg-slate-900/60 border-b border-slate-800/80 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-        {/* Search Input */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        {/* Search */}
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search stripped files, original paths, extensions..."
-            className="w-full pl-9 pr-4 py-1.5 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search files, paths, extensions..."
+            className="w-full pl-8 pr-3 py-1.5 surface-inset rounded-lg border border-subtle text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
           />
         </div>
 
-        {/* Category Pills */}
-        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 md:pb-0 text-xs">
+        {/* Category pills */}
+        <div className="flex items-center space-x-1 overflow-x-auto text-xs">
           {[
-            { id: 'all', label: 'All' },
-            { id: 'code', label: 'Code' },
-            { id: 'document', label: 'Docs' },
-            { id: 'image', label: 'Images' },
-            { id: 'data', label: 'Data' },
-            { id: 'other', label: 'Other' },
-          ].map(cat => (
+            { id: "all", label: "All" },
+            { id: "code", label: "Code" },
+            { id: "document", label: "Docs" },
+            { id: "image", label: "Images" },
+            { id: "data", label: "Data" },
+            { id: "other", label: "Other" },
+          ].map((cat) => (
             <button
               key={cat.id}
               type="button"
               onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-1 rounded-lg font-medium transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all whitespace-nowrap cursor-pointer border ${
                 selectedCategory === cat.id
-                  ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-md shadow-purple-600/30'
-                  : 'bg-[#181330] text-slate-300 hover:text-white hover:bg-[#221b44] border border-[#2b2252]'
+                  ? "bg-purple-600 border-purple-600 text-white"
+                  : "surface-raised border-chrome text-slate-400 hover:text-slate-200"
               }`}
             >
               {cat.label}
@@ -223,27 +206,44 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
           ))}
         </div>
 
-        {/* Sort & Actions */}
-        <div className="flex items-center space-x-2">
-          <div className="flex items-center space-x-1 text-xs bg-[#16122d] px-2.5 py-1.5 rounded-lg border border-[#2d2552] text-slate-300">
-            <ArrowUpDown className="w-3.5 h-3.5 text-purple-400" />
+        {/* Right controls */}
+        <div className="flex items-center space-x-2 ml-auto">
+          <select
+            id="collision-select"
+            aria-label="Duplicate handling strategy"
+            value={collisionStrategy}
+            onChange={(e) =>
+              onStrategyChange(e.target.value as CollisionStrategy)
+            }
+            className="surface-raised text-slate-300 text-xs rounded-lg px-2 py-1.5 border border-chrome focus:outline-none focus:border-purple-500 cursor-pointer"
+          >
+            <option value="enumerate">Auto-number duplicates</option>
+            <option value="prefix-path">Prefix path</option>
+            <option value="overwrite">Overwrite</option>
+          </select>
+
+          <div className="flex items-center space-x-1 surface-raised px-2 py-1.5 rounded-lg border border-chrome text-xs text-slate-300">
+            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
             <select
               value={sortBy}
-              onChange={e => setSortBy(e.target.value as any)}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              aria-label="Sort files by"
               className="bg-transparent focus:outline-none cursor-pointer"
             >
-              <option value="name" className="bg-[#120e24]">Sort by Name</option>
-              <option value="size" className="bg-[#120e24]">Sort by Size</option>
-              <option value="date" className="bg-[#120e24]">Sort by Date</option>
-              <option value="ext" className="bg-[#120e24]">Sort by Extension</option>
+              <option value="name">Name</option>
+              <option value="size">Size</option>
+              <option value="date">Date</option>
+              <option value="ext">Ext</option>
             </select>
             <button
               type="button"
-              onClick={() => setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+              onClick={() =>
+                setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+              }
               className="px-1 text-purple-400 hover:text-purple-300 font-mono font-bold cursor-pointer"
               title="Toggle sort direction"
             >
-              {sortOrder === 'asc' ? '↑' : '↓'}
+              {sortOrder === "asc" ? "↑" : "↓"}
             </button>
           </div>
 
@@ -251,20 +251,20 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
             type="button"
             onClick={onDownloadAllZip}
             disabled={isZipping || files.length === 0}
-            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-medium text-xs shadow-md shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             <FileArchive className="w-3.5 h-3.5" />
-            <span>{isZipping ? 'Archiving...' : 'Download Flat ZIP'}</span>
+            <span>{isZipping ? "Archiving..." : "Flat ZIP"}</span>
           </button>
         </div>
       </div>
 
-      {/* Zipping Progress Bar */}
+      {/* Zipping Progress Bar (only while zipping) */}
       {isZipping && zipProgress && (
-        <div className="bg-purple-950/40 border-b border-purple-900/60 px-6 py-2.5 flex items-center space-x-4">
-          <div className="flex-1 bg-[#16122d] h-2 rounded-full overflow-hidden">
+        <div className="bg-purple-500/10 border-b border-purple-500/25 px-6 py-2 flex items-center space-x-4">
+          <div className="flex-1 surface-inset h-1.5 rounded-full overflow-hidden border border-subtle">
             <div
-              className="bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400 h-full transition-all duration-200 rounded-full"
+              className="bg-purple-500 h-full transition-all duration-200 rounded-full"
               style={{ width: `${zipProgress.percent}%` }}
             />
           </div>
@@ -274,19 +274,23 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
         </div>
       )}
 
-      {/* Files Table / Content Area */}
+      {/* Files Table */}
       <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
         {filteredFiles.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Filter className="w-10 h-10 text-slate-600 mb-3" />
-            <p className="text-slate-300 font-medium text-sm">No matching files found</p>
-            <p className="text-slate-500 text-xs mt-1">Try adjusting your search or filters.</p>
+            <p className="text-slate-300 font-medium text-sm">
+              No matching files found
+            </p>
+            <p className="text-slate-500 text-xs mt-1">
+              Try adjusting your search or filters.
+            </p>
           </div>
         ) : (
-          <div className="bg-[#110e24] rounded-2xl border border-[#27204b] overflow-hidden shadow-xl">
+          <div className="surface-card rounded-2xl border border-chrome overflow-hidden shadow-lg">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[#0a0816] border-b border-[#241d44] text-slate-400 font-semibold uppercase tracking-wider text-[11px] font-sans">
+                <thead className="surface-inset border-b border-chrome text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
                   <tr>
                     <th className="py-3 px-3 w-10 text-center">
                       <input
@@ -297,10 +301,12 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                         }
                         onChange={toggleSelectAll}
                         aria-label="Select all stripped files"
-                        className="rounded border-slate-700 bg-[#16122d] text-purple-500 focus:ring-0 cursor-pointer"
+                        className="rounded border-slate-700 bg-transparent text-purple-500 focus:ring-0 cursor-pointer"
                       />
                     </th>
-                    <th className="py-3 px-4">Stripped File Name (In Flat Root)</th>
+                    <th className="py-3 px-4">
+                      Stripped File Name (In Flat Root)
+                    </th>
                     <th className="py-3 px-4">Original Nested Path</th>
                     <th className="py-3 px-3">Type / Ext</th>
                     <th className="py-3 px-3 text-right">Size</th>
@@ -308,44 +314,42 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                     <th className="py-3 px-3 text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#1e183a] font-mono">
-                  {filteredFiles.map(file => {
+                <tbody className="divide-y divide-[var(--border-subtle)] font-mono">
+                  {filteredFiles.map((file) => {
                     const isSelected = selectedFileIds.has(file.id);
                     const isRenamed = file.flattenedName !== file.originalName;
 
                     return (
                       <tr
                         key={file.id}
-                        className={`hover:bg-[#1a1436]/70 transition-colors ${
-                          isSelected ? 'bg-purple-950/30' : ''
+                        className={`transition-colors hover:bg-[var(--surface-hover)] ${
+                          isSelected ? "bg-purple-500/10" : ""
                         }`}
                       >
-                        {/* Checkbox */}
                         <td className="py-2.5 px-3 text-center">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleSelectFile(file.id)}
                             aria-label={`Select ${file.flattenedName}`}
-                            className="rounded border-slate-700 bg-[#16122d] text-purple-500 focus:ring-0 cursor-pointer"
+                            className="rounded border-slate-700 bg-transparent text-purple-500 focus:ring-0 cursor-pointer"
                           />
                         </td>
 
-                        {/* Flat Name */}
                         <td className="py-2.5 px-4 font-sans font-medium text-slate-100">
                           <div className="flex items-center space-x-2">
-                            <span className="shrink-0">{getCategoryIcon(file)}</span>
+                            <span className="shrink-0">
+                              {getCategoryIcon(file)}
+                            </span>
                             <span
-                              className={`truncate max-w-xs ${
-                                isRenamed ? 'text-purple-300 font-semibold' : ''
-                              }`}
+                              className={`truncate max-w-xs ${isRenamed ? "text-purple-300 font-semibold" : ""}`}
                               title={file.flattenedName}
                             >
                               {file.flattenedName}
                             </span>
                             {isRenamed && (
                               <span
-                                className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-sans border border-amber-500/30 font-medium"
+                                className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 font-sans border border-amber-500/30 font-medium"
                                 title={`Original was: ${file.originalName}`}
                               >
                                 Renamed
@@ -354,10 +358,12 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                           </div>
                         </td>
 
-                        {/* Original Path */}
                         <td className="py-2.5 px-4 text-slate-400 font-mono text-[11px]">
                           <div className="flex items-center space-x-1.5 group">
-                            <span className="truncate max-w-sm" title={file.relativePath}>
+                            <span
+                              className="truncate max-w-sm"
+                              title={file.relativePath}
+                            >
                               {file.relativePath}
                             </span>
                             <button
@@ -375,30 +381,26 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                           </div>
                         </td>
 
-                        {/* Extension */}
                         <td className="py-2.5 px-3">
-                          <span className="px-2 py-0.5 rounded-full bg-purple-950/60 border border-purple-800/60 text-purple-300 text-[10px] font-mono uppercase font-bold tracking-wider">
-                            {file.extension || 'FILE'}
+                          <span className="px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/25 text-purple-300 text-[10px] font-mono uppercase font-bold tracking-wider">
+                            {file.extension || "FILE"}
                           </span>
                         </td>
 
-                        {/* Size */}
                         <td className="py-2.5 px-3 text-right text-slate-300">
                           {formatBytes(file.size)}
                         </td>
 
-                        {/* Modified Date */}
                         <td className="py-2.5 px-4 text-slate-400 text-[11px]">
                           {formatDate(file.lastModified)}
                         </td>
 
-                        {/* Actions */}
                         <td className="py-2.5 px-3 text-center">
                           <div className="flex items-center justify-center space-x-1">
                             <button
                               type="button"
                               onClick={() => onPreviewFile(file)}
-                              className="p-1 rounded text-slate-400 hover:text-purple-300 hover:bg-[#221a44] transition-colors"
+                              className="p-1 rounded text-slate-400 hover:text-purple-300 hover:bg-[var(--surface-hover)] transition-colors"
                               title="Preview file content"
                             >
                               <Eye className="w-3.5 h-3.5" />
@@ -406,7 +408,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                             <button
                               type="button"
                               onClick={() => handleDownloadSingle(file)}
-                              className="p-1 rounded text-slate-400 hover:text-emerald-300 hover:bg-[#221a44] transition-colors"
+                              className="p-1 rounded text-slate-400 hover:text-emerald-300 hover:bg-[var(--surface-hover)] transition-colors"
                               title="Download this file stripped"
                             >
                               <Download className="w-3.5 h-3.5" />
@@ -421,26 +423,31 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
             </div>
 
             {/* Table Footer */}
-            <div className="bg-slate-950/70 border-t border-slate-800 px-4 py-2.5 flex items-center justify-between text-xs text-slate-400">
+            <div className="surface-inset border-t border-chrome px-4 py-2.5 flex items-center justify-between text-xs text-slate-400">
               <div>
-                Showing <span className="font-semibold text-slate-200">{filteredFiles.length}</span> of{' '}
-                <span className="font-semibold text-slate-200">{files.length}</span> stripped files
+                Showing{" "}
+                <span className="font-semibold text-slate-200">
+                  {filteredFiles.length}
+                </span>{" "}
+                of{" "}
+                <span className="font-semibold text-slate-200">
+                  {files.length}
+                </span>{" "}
+                stripped files
                 {selectedFileIds.size > 0 && (
                   <span className="ml-3 text-blue-400 font-medium">
                     ({selectedFileIds.size} selected)
                   </span>
                 )}
               </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={onOpenAnotherFolder}
-                  className="flex items-center space-x-1 text-slate-400 hover:text-slate-200"
-                >
-                  <FolderOpen className="w-3.5 h-3.5" />
-                  <span>Choose Another Folder</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={onOpenAnotherFolder}
+                className="flex items-center space-x-1 text-slate-400 hover:text-slate-200"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span>Choose Another Folder</span>
+              </button>
             </div>
           </div>
         )}

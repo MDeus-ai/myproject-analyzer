@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from "react";
 import {
   FolderOpen,
   FileArchive,
@@ -12,13 +12,16 @@ import {
   ImageIcon,
   Code2,
   ShieldAlert,
-  Home,
-} from 'lucide-react';
-import { FolderAnalysisStats, ExcludedFolderInfo } from '../types';
+  ChevronDown,
+} from "lucide-react";
+import { FolderAnalysisStats, ExcludedFolderInfo } from "../types";
+import { ThemeSwitcher } from "./ThemeSwitcher";
 
 interface DesktopHeaderProps {
-  activeTab: 'files' | 'tree' | 'pdf' | 'analytics' | 'analyzer';
-  setActiveTab: (tab: 'files' | 'tree' | 'pdf' | 'analytics' | 'analyzer') => void;
+  activeTab: "files" | "tree" | "pdf" | "analytics" | "analyzer";
+  setActiveTab: (
+    tab: "files" | "tree" | "pdf" | "analytics" | "analyzer",
+  ) => void;
   stats: FolderAnalysisStats | null;
   onOpenFolderClick: () => void;
   onLoadSampleClick: () => void;
@@ -31,6 +34,136 @@ interface DesktopHeaderProps {
   excludedFolders?: ExcludedFolderInfo[];
   onReviewExclusionsClick?: () => void;
 }
+
+/* ------------------------------------------------------------------ */
+/* Consolidated export menu                                            */
+/* ------------------------------------------------------------------ */
+
+interface ExportMenuProps {
+  disabled: boolean;
+  isZipping?: boolean;
+  onZip: () => void;
+  onPdf: () => void;
+  onImage?: () => void;
+}
+
+const ExportMenu: React.FC<ExportMenuProps> = ({
+  disabled,
+  isZipping,
+  onZip,
+  onPdf,
+  onImage,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const run = (action?: () => void) => {
+    setIsOpen(false);
+    action?.();
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen((open) => !open)}
+        aria-expanded={isOpen}
+        aria-label="Export options"
+        className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        title={disabled ? "Open a project to enable exports" : "Export options"}
+      >
+        <Download className="w-3.5 h-3.5 text-emerald-400" />
+        <span className="hidden sm:inline">Export</span>
+        <ChevronDown
+          className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl surface-card border border-chrome shadow-2xl shadow-black/50 z-50 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-subtle text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            Export Project
+          </div>
+          <div className="p-1.5 space-y-0.5">
+            <button
+              type="button"
+              onClick={() => run(onZip)}
+              className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors"
+            >
+              <FileArchive className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+              <span>
+                <span className="block text-xs font-semibold text-slate-200">
+                  {isZipping ? "Archiving…" : "Flat ZIP Archive"}
+                </span>
+                <span className="block text-[10px] text-slate-500">
+                  All stripped files at root level
+                </span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => run(onPdf)}
+              className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors"
+            >
+              <FileText className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <span>
+                <span className="block text-xs font-semibold text-slate-200">
+                  Structure PDF
+                </span>
+                <span className="block text-[10px] text-slate-500">
+                  Vector tree + inventory report
+                </span>
+              </span>
+            </button>
+
+            {onImage && (
+              <button
+                type="button"
+                onClick={() => run(onImage)}
+                className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors"
+              >
+                <ImageIcon className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                <span>
+                  <span className="block text-xs font-semibold text-slate-200">
+                    Image (PNG / JPEG)
+                  </span>
+                  <span className="block text-[10px] text-slate-500">
+                    High-res sheet via PDF Architect
+                  </span>
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/* Single-row consolidated header                                      */
+/* ------------------------------------------------------------------ */
+
+const TABS = [
+  { id: "files", label: "Files", icon: ListFilter },
+  { id: "tree", label: "Tree", icon: FolderTree },
+  { id: "pdf", label: "PDF & Image", icon: FileText },
+  { id: "analytics", label: "Stats", icon: BarChart3 },
+  { id: "analyzer", label: "Analyzer", icon: Code2 },
+] as const;
 
 export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
   activeTab,
@@ -47,73 +180,99 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
   excludedFolders,
   onReviewExclusionsClick,
 }) => {
-  return (
-    <header className="bg-[#0e0c1a] border-b border-[#241f3d] text-slate-200 select-none sticky top-0 z-40">
-      {/* Top Application Bar */}
-      <div className="flex items-center justify-between px-4 sm:px-6 py-2.5 border-b border-[#1f1a36] bg-[#0a0815]/80 backdrop-blur-md">
-        <div className="flex items-center space-x-3">
-          {/* Logo & Brand title - clicking takes user to homepage */}
-          <button
-            type="button"
-            onClick={onGoHomeClick}
-            className="flex items-center space-x-2.5 text-left group hover:opacity-90 transition-opacity cursor-pointer"
-            title="Go to Homepage"
-          >
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 via-violet-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-purple-600/30 group-hover:scale-105 transition-transform">
-              <FolderTree className="w-4 h-4" />
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="font-bold text-sm sm:text-base tracking-tight text-white group-hover:text-purple-200 transition-colors">
-                MyProject Analyzer
-              </span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-950/60 text-purple-300 border border-purple-700/50 font-mono font-medium">
-                v1.0
-              </span>
-            </div>
-          </button>
-        </div>
+  const badgeFor = (id: (typeof TABS)[number]["id"]): string | null => {
+    if (!stats) return null;
+    if (id === "files") return String(stats.totalFiles);
+    if (id === "tree") return `${stats.totalFolders} dirs`;
+    return null;
+  };
 
-        {/* Center: Current Target Folder Pill */}
-        <div className="hidden md:flex items-center space-x-2 text-xs">
-          {stats ? (
-            <div className="flex items-center space-x-2 px-3 py-1 bg-[#16122a] rounded-full border border-[#2d254f] text-slate-300">
+  return (
+    <header className="surface-header border-b border-chrome text-slate-200 select-none sticky top-0 z-40">
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2">
+        {/* Brand - clicking returns to homepage */}
+        <button
+          type="button"
+          onClick={onGoHomeClick}
+          className="flex items-center space-x-2.5 text-left group hover:opacity-90 transition-opacity cursor-pointer shrink-0"
+          title="Go to Homepage"
+        >
+          <div className="w-8 h-8 rounded-lg bg-purple-600 group-hover:bg-purple-500 flex items-center justify-center text-white shadow-sm transition-colors">
+            <FolderTree className="w-4 h-4" />
+          </div>
+          <span className="hidden sm:block font-semibold text-sm tracking-tight text-slate-100 group-hover:text-purple-300 transition-colors">
+            MyProject Analyzer
+          </span>
+        </button>
+
+        {/* Divider */}
+        <div className="hidden md:block w-px h-6 bg-[var(--border-chrome)] shrink-0" />
+
+        {/* Navigation Tabs */}
+        <nav
+          className="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto py-0.5"
+          aria-label="Views"
+        >
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            const badge = badgeFor(tab.id);
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                aria-current={isActive ? "page" : undefined}
+                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap border ${
+                  isActive
+                    ? "bg-purple-600/15 text-purple-300 border-purple-500/30"
+                    : "text-slate-400 border-transparent hover:text-slate-200 hover:bg-[var(--surface-hover)]"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">{tab.label}</span>
+                {badge && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-medium border ${
+                      isActive
+                        ? "bg-purple-500/15 text-purple-300 border-purple-500/30"
+                        : "bg-[var(--surface-raised)] text-slate-500 border-subtle"
+                    }`}
+                  >
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Right cluster */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Target folder pill */}
+          {stats && (
+            <div className="hidden lg:flex items-center space-x-2 px-3 py-1 surface-raised rounded-full border border-chrome text-xs text-slate-300">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-slate-400">Target Folder:</span>
-              <span className="font-mono font-medium text-purple-300">{stats.rootName}</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-slate-300">{stats.totalFiles} files</span>
+              <span className="font-mono font-medium text-purple-400 max-w-[140px] truncate">
+                {stats.rootName}
+              </span>
+              <span className="text-slate-500">•</span>
+              <span>{stats.totalFiles} files</span>
             </div>
-          ) : (
-            <span className="text-slate-500 italic text-xs">No project opened</span>
           )}
 
+          {/* Exclusion pill */}
           {excludedFolders && excludedFolders.length > 0 && (
             <button
               type="button"
               onClick={onReviewExclusionsClick}
-              className="flex items-center space-x-1.5 px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 rounded-full border border-amber-500/30 text-amber-300 text-xs transition-colors cursor-pointer"
-              title="Click to view details about automatically excluded folders"
+              className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 rounded-full border border-amber-500/30 text-amber-300 text-xs transition-colors cursor-pointer"
+              title="Review automatically excluded folders"
             >
               <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-              <span>
-                Excluded ({excludedFolders.length}):{' '}
-                <strong className="font-mono">{excludedFolders.map(f => f.name).join(', ')}</strong>
+              <span className="font-mono">
+                Excluded ({excludedFolders.length})
               </span>
-            </button>
-          )}
-        </div>
-
-        {/* Right Header Actions */}
-        <div className="flex items-center space-x-2">
-          {onGoHomeClick && (
-            <button
-              type="button"
-              onClick={onGoHomeClick}
-              className="flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-[#1a1532] transition-colors border border-[#241f3d]"
-              title="Return to Homepage"
-            >
-              <Home className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden sm:inline">Home</span>
             </button>
           )}
 
@@ -121,152 +280,43 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             type="button"
             onClick={onLoadSampleClick}
             aria-label="Load demo folder"
-            className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#181330] hover:bg-[#201a40] text-purple-200 transition-colors border border-[#322858]"
-            title="Load sample folder structure for instant testing"
+            className="flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-300 transition-colors border border-chrome"
+            title="Load sample folder structure"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Load Sample</span>
+            <span className="hidden md:inline">Sample</span>
           </button>
 
           <button
             type="button"
             onClick={onOpenFolderClick}
             aria-label="Open folder"
-            className="flex items-center space-x-1.5 text-xs px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-medium transition-all shadow-md shadow-purple-600/30 active:scale-95 cursor-pointer"
+            className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-all shadow-sm active:scale-95 cursor-pointer"
           >
             <FolderOpen className="w-3.5 h-3.5" />
-            <span>Open Folder</span>
+            <span className="hidden sm:inline">Open Folder</span>
           </button>
+
+          <ExportMenu
+            disabled={!stats}
+            isZipping={isZipping}
+            onZip={onDownloadZipClick}
+            onPdf={onDownloadPdfClick}
+            onImage={onDownloadImageClick}
+          />
+
+          <ThemeSwitcher />
 
           <button
             type="button"
             onClick={onHelpClick}
             aria-label="Help and shortcuts"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[#1a1532] transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[var(--surface-hover)] transition-colors"
             title="Shortcuts & Documentation"
           >
             <HelpCircle className="w-4 h-4" />
           </button>
         </div>
-      </div>
-
-      {/* Main Navigation Toolbar (Tabs & Global Quick Exports) */}
-      <div className="flex items-center justify-between px-4 sm:px-6 py-2 bg-[#0e0c1a]/95 backdrop-blur-md">
-        {/* Navigation Tabs */}
-        <nav className="flex space-x-1 sm:space-x-1.5 overflow-x-auto py-0.5" aria-label="Views">
-          <button
-            type="button"
-            onClick={() => setActiveTab('files')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'files'
-                ? 'bg-purple-600/25 text-purple-200 border border-purple-500/40 shadow-sm shadow-purple-600/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181330]'
-            }`}
-          >
-            <ListFilter className="w-4 h-4 text-purple-400" />
-            <span>Stripped Files (Flat)</span>
-            {stats && (
-              <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300 font-mono font-semibold">
-                {stats.totalFiles}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('tree')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'tree'
-                ? 'bg-indigo-600/25 text-indigo-200 border border-indigo-500/40 shadow-sm shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181330]'
-            }`}
-          >
-            <FolderTree className="w-4 h-4 text-indigo-400" />
-            <span>Directory Tree</span>
-            {stats && (
-              <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-semibold">
-                {stats.totalFolders} dirs
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('pdf')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'pdf'
-                ? 'bg-emerald-600/25 text-emerald-200 border border-emerald-500/40 shadow-sm shadow-emerald-600/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181330]'
-            }`}
-          >
-            <FileText className="w-4 h-4 text-emerald-400" />
-            <span>PDF Structure Architect</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('analytics')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'analytics'
-                ? 'bg-violet-600/25 text-violet-200 border border-violet-500/40 shadow-sm shadow-violet-600/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181330]'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4 text-violet-400" />
-            <span className="hidden sm:inline">Stats</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('analyzer')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'analyzer'
-                ? 'bg-cyan-600/25 text-cyan-200 border border-cyan-500/40 shadow-sm shadow-cyan-600/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181330]'
-            }`}
-          >
-            <Code2 className="w-4 h-4 text-cyan-400" />
-            <span>CodeFile Analyzer</span>
-          </button>
-        </nav>
-
-        {/* Global Export Actions */}
-        {stats && (
-          <div className="hidden sm:flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={onDownloadZipClick}
-              disabled={isZipping}
-              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#1a1532] hover:bg-[#231c44] text-slate-200 transition-colors border border-[#2e2652]"
-              title="Download all stripped flat files as a ZIP archive"
-            >
-              <FileArchive className="w-3.5 h-3.5 text-purple-400" />
-              <span>{isZipping ? 'Archiving...' : 'Export Flat ZIP'}</span>
-            </button>
-
-            {onDownloadImageClick && (
-              <button
-                type="button"
-                onClick={onDownloadImageClick}
-                className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#1a1532] hover:bg-[#231c44] text-slate-200 transition-colors border border-[#2e2652]"
-                title="Go to PDF/Image Architect to download PNG/JPEG"
-              >
-                <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Export Image</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onDownloadPdfClick}
-              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white font-medium transition-all shadow-sm"
-              title="Generate and download directory structure PDF"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download PDF</span>
-            </button>
-          </div>
-        )}
       </div>
     </header>
   );

@@ -1,21 +1,25 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState } from "react";
 import {
   FolderUp,
   FolderTree,
   FileArchive,
   FileText,
   Sparkles,
-  ShieldCheck,
   ShieldAlert,
   Code2,
-} from 'lucide-react';
-import { readDroppedEntries, processFileList } from '../utils/folderReader';
-import { FolderScanResult } from '../types';
+} from "lucide-react";
+import {
+  readDroppedEntries,
+  processFileList,
+  ScanProgress,
+} from "../utils/folderReader";
+import { FolderScanResult } from "../types";
 
 interface FolderDropzoneProps {
   onScanResult: (result: FolderScanResult) => void;
   onLoadSample: () => void;
   onLoadSampleWithHeavyFolders?: () => void;
+  onScanProgress?: (progress: ScanProgress | null) => void;
   isLoading?: boolean;
 }
 
@@ -23,10 +27,11 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
   onScanResult,
   onLoadSample,
   onLoadSampleWithHeavyFolders,
+  onScanProgress,
   isLoading,
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState<string>('');
+  const [errorStatus, setErrorStatus] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -47,39 +52,55 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
     setIsDragOver(false);
 
     if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setLoadingStatus('Scanning directories and checking for heavy folders (node_modules, .git)...');
       try {
-        const result = await readDroppedEntries(e.dataTransfer.items);
-        if (result.files.length > 0 || (result.allRawFiles && result.allRawFiles.length > 0)) {
+        const result = await readDroppedEntries(e.dataTransfer.items, {
+          onProgress: (p) => onScanProgress?.(p),
+        });
+        if (
+          result.files.length > 0 ||
+          (result.allRawFiles && result.allRawFiles.length > 0)
+        ) {
           onScanResult(result);
         } else {
-          setLoadingStatus('No readable files found in dropped item.');
+          setErrorStatus("No readable files found in dropped item.");
         }
       } catch (err) {
-        console.error('Error processing dropped folder:', err);
-        setLoadingStatus('Failed to process folder. Try the folder browser button.');
+        console.error("Error processing dropped folder:", err);
+        setErrorStatus(
+          "Failed to process folder. Try the folder browser button.",
+        );
       } finally {
-        setTimeout(() => setLoadingStatus(''), 2000);
+        onScanProgress?.(null);
+        setTimeout(() => setErrorStatus(""), 3000);
       }
     } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      setLoadingStatus('Processing files and detecting exclusions...');
-      const result = await processFileList(e.dataTransfer.files);
-      onScanResult(result);
-      setLoadingStatus('');
+      try {
+        const result = await processFileList(e.dataTransfer.files, {
+          onProgress: (p) => onScanProgress?.(p),
+        });
+        onScanResult(result);
+      } finally {
+        onScanProgress?.(null);
+      }
     }
   };
 
-  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     if (e.target.files && e.target.files.length > 0) {
-      setLoadingStatus('Analyzing folder tree & checking for node_modules...');
       try {
-        const result = await processFileList(e.target.files);
+        const result = await processFileList(e.target.files, {
+          onProgress: (p) => onScanProgress?.(p),
+        });
         onScanResult(result);
       } catch (err) {
-        console.error('Error reading selected folder:', err);
-        setLoadingStatus('Error loading folder.');
+        console.error("Error reading selected folder:", err);
+        setErrorStatus("Error loading folder.");
       } finally {
-        setLoadingStatus('');
+        onScanProgress?.(null);
+        e.target.value = "";
+        setTimeout(() => setErrorStatus(""), 3000);
       }
     }
   };
@@ -106,43 +127,44 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`relative border-2 border-dashed rounded-2xl p-8 sm:p-12 transition-all duration-200 text-center cursor-pointer ${
+        className={`relative border-2 border-dashed rounded-2xl p-8 sm:p-12 transition-all duration-200 text-center cursor-pointer surface-card ${
           isDragOver
-            ? 'border-blue-400 bg-blue-500/10 scale-[1.01] shadow-2xl shadow-blue-500/20'
-            : 'border-slate-700 bg-slate-900/50 hover:border-slate-600 hover:bg-slate-900/80 shadow-xl'
+            ? "border-purple-400 bg-purple-500/10"
+            : "border-chrome hover:border-purple-500/40"
         }`}
         onClick={handleBrowseClick}
       >
         <div className="flex flex-col items-center max-w-xl mx-auto">
-          {/* Animated Icon Circle */}
+          {/* Icon */}
           <div className="relative mb-6">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 group-hover:scale-105 transition-transform">
-              <FolderUp className="w-10 h-10" />
+            <div className="w-16 h-16 rounded-2xl bg-purple-600 flex items-center justify-center text-white shadow-md">
+              <FolderUp className="w-8 h-8" />
             </div>
-            <div className="absolute -bottom-2 -right-2 p-1.5 rounded-lg bg-emerald-500 text-white shadow-md">
-              <FolderTree className="w-4 h-4" />
+            <div className="absolute -bottom-2 -right-2 p-1.5 rounded-lg bg-emerald-500 text-white shadow-sm">
+              <FolderTree className="w-3.5 h-3.5" />
             </div>
           </div>
 
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mb-3">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-100 mb-3">
             Drop your folder here
           </h2>
 
           <p className="text-slate-400 text-sm sm:text-base leading-relaxed mb-6">
-            Drag & drop any project folder. We automatically strip inner directories into flat files,
-            generate a clean hierarchy PDF/image, and analyze codefiles.
+            Drag &amp; drop any project folder. We automatically strip inner
+            directories into flat files, generate a clean hierarchy PDF/image,
+            and analyze codefiles.
           </p>
 
           {/* Action buttons */}
           <div className="flex flex-wrap items-center justify-center gap-3 w-full mb-8">
             <button
               type="button"
-              onClick={e => {
+              onClick={(e) => {
                 e.stopPropagation();
                 handleBrowseClick();
               }}
               disabled={isLoading}
-              className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-all shadow-md shadow-blue-600/30 hover:shadow-lg active:scale-95"
+              className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium text-sm transition-all shadow-sm active:scale-95 disabled:opacity-50"
             >
               <FolderUp className="w-4 h-4" />
               <span>Select Folder from Computer</span>
@@ -150,11 +172,11 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
 
             <button
               type="button"
-              onClick={e => {
+              onClick={(e) => {
                 e.stopPropagation();
                 onLoadSample();
               }}
-              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium text-sm transition-all hover:border-slate-600 active:scale-95"
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome font-medium text-sm transition-all active:scale-95"
             >
               <Sparkles className="w-4 h-4 text-amber-400" />
               <span>Try Clean Demo Project</span>
@@ -163,7 +185,7 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
             {onLoadSampleWithHeavyFolders && (
               <button
                 type="button"
-                onClick={e => {
+                onClick={(e) => {
                   e.stopPropagation();
                   onLoadSampleWithHeavyFolders();
                 }}
@@ -176,16 +198,16 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
             )}
           </div>
 
-          {/* Status readout */}
-          {loadingStatus && (
-            <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs mb-4 animate-pulse">
-              <span>{loadingStatus}</span>
+          {/* Error readout */}
+          {errorStatus && (
+            <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/30 text-xs mb-4">
+              <span>{errorStatus}</span>
             </div>
           )}
 
           {/* Feature checklist */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full text-left pt-6 border-t border-slate-800/80">
-            <div className="flex items-start space-x-2.5 p-2 rounded-lg bg-slate-800/40 border border-slate-800/60">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full text-left pt-6 border-t border-subtle">
+            <div className="flex items-start space-x-2.5 p-2 rounded-lg surface-raised border border-subtle">
               <FileArchive className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
               <div>
                 <span className="block text-xs font-semibold text-slate-200">
@@ -197,26 +219,26 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
               </div>
             </div>
 
-            <div className="flex items-start space-x-2.5 p-2 rounded-lg bg-slate-800/40 border border-slate-800/60">
+            <div className="flex items-start space-x-2.5 p-2 rounded-lg surface-raised border border-subtle">
               <FileText className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <div>
                 <span className="block text-xs font-semibold text-slate-200">
-                  Structure PDF & Image
+                  Structure PDF &amp; Image
                 </span>
                 <span className="block text-[11px] text-slate-400 leading-tight">
-                  ASCII tree & high-res image export.
+                  ASCII tree &amp; high-res image export.
                 </span>
               </div>
             </div>
 
-            <div className="flex items-start space-x-2.5 p-2 rounded-lg bg-slate-800/40 border border-slate-800/60">
+            <div className="flex items-start space-x-2.5 p-2 rounded-lg surface-raised border border-subtle">
               <Code2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
               <div>
                 <span className="block text-xs font-semibold text-slate-200">
                   CodeFile Analyzer
                 </span>
                 <span className="block text-[11px] text-slate-400 leading-tight">
-                  Location & type metadata bundler.
+                  Location &amp; type metadata bundler.
                 </span>
               </div>
             </div>
@@ -228,7 +250,7 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
                   Auto-Excludes Heavy Folders
                 </span>
                 <span className="block text-[11px] text-amber-200/70 leading-tight">
-                  Detects node_modules & warns before importing.
+                  Detects node_modules &amp; warns before importing.
                 </span>
               </div>
             </div>

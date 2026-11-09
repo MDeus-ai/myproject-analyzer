@@ -19,7 +19,7 @@ export interface ProcessedFile {
   textContent?: string;
 }
 
-export type CollisionStrategy = 'enumerate' | 'prefix-path' | 'overwrite';
+export type CollisionStrategy = "enumerate" | "prefix-path" | "overwrite";
 
 export interface FolderNode {
   name: string;
@@ -43,6 +43,8 @@ export interface FolderAnalysisStats {
   scannedAt: Date;
 }
 
+export type PdfTreeFont = "mono" | "sans" | "serif";
+
 export interface PdfOptions {
   title: string;
   includeTree: boolean;
@@ -50,8 +52,12 @@ export interface PdfOptions {
   includeInventoryTable: boolean;
   includeSizes: boolean;
   includeDates: boolean;
-  treeStyle: 'standard' | 'compact';
-  themeColor: 'blue' | 'indigo' | 'emerald' | 'amber';
+  treeStyle: "standard" | "compact";
+  themeColor: "blue" | "indigo" | "emerald" | "amber";
+  /** Font family used for the hierarchy tree (and inventory table body). */
+  treeFont: PdfTreeFont;
+  /** Tree text size in points. */
+  treeFontSize: number;
 }
 
 export interface ExcludedFolderInfo {
@@ -59,7 +65,7 @@ export interface ExcludedFolderInfo {
   path: string;
   fileCount: number;
   description: string;
-  category: 'dependencies' | 'vcs' | 'build' | 'cache' | 'env';
+  category: "dependencies" | "vcs" | "build" | "cache" | "env";
 }
 
 export interface FolderScanResult {

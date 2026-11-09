@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   X,
   Download,
@@ -11,10 +11,11 @@ import {
   Calendar,
   HardDrive,
   FolderTree,
-} from 'lucide-react';
-import { ProcessedFile } from '../types';
-import { formatBytes, formatDate, getFileCategory } from '../utils/fileHelpers';
-import { triggerFileDownload } from '../utils/zipExporter';
+} from "lucide-react";
+import { ProcessedFile } from "../types";
+import { formatBytes, formatDate, getFileCategory } from "../utils/fileHelpers";
+import { triggerFileDownload } from "../utils/zipExporter";
+import { copyToClipboard } from "../utils/clipboard";
 
 interface FilePreviewModalProps {
   file: ProcessedFile | null;
@@ -29,9 +30,10 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
   if (!file) return null;
 
-  const handleCopyContent = () => {
-    if (file.textContent) {
-      navigator.clipboard.writeText(file.textContent);
+  const handleCopyContent = async () => {
+    if (!file.textContent) return;
+    const succeeded = await copyToClipboard(file.textContent);
+    if (succeeded) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -50,39 +52,42 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
-        onClick={e => e.stopPropagation()}
+        className="w-full max-w-3xl surface-card border border-chrome rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-blue-600/20 text-blue-400">
-              {category === 'image' ? (
+        <div className="flex items-center justify-between px-6 py-4 border-b border-subtle surface-raised">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 shrink-0">
+              {category === "image" ? (
                 <FileImage className="w-5 h-5" />
-              ) : category === 'code' ? (
+              ) : category === "code" ? (
                 <FileCode className="w-5 h-5" />
               ) : (
                 <FileText className="w-5 h-5" />
               )}
             </div>
-            <div>
-              <h3 className="font-semibold text-slate-100 text-sm">{file.flattenedName}</h3>
-              <p className="text-xs text-slate-400 font-mono">
-                Original Path: <span className="text-slate-300">{file.relativePath}</span>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-slate-100 text-sm truncate">
+                {file.flattenedName}
+              </h3>
+              <p className="text-xs text-slate-400 font-mono truncate">
+                Original Path:{" "}
+                <span className="text-slate-300">{file.relativePath}</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 shrink-0">
             {file.textContent && (
               <button
                 type="button"
                 onClick={handleCopyContent}
-                className="flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                className="flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] border border-chrome text-slate-300 transition-colors"
                 title="Copy file text"
               >
                 {copied ? (
@@ -112,7 +117,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[var(--surface-hover)] transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -120,25 +125,40 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
         </div>
 
         {/* Metadata info cards */}
-        <div className="grid grid-cols-3 gap-2 px-6 py-2.5 bg-slate-950/40 border-b border-slate-800 text-xs">
+        <div className="grid grid-cols-3 gap-2 px-6 py-2.5 surface-inset border-b border-subtle text-xs">
           <div className="flex items-center space-x-2 text-slate-400">
-            <HardDrive className="w-3.5 h-3.5 text-blue-400" />
-            <span>Size: <strong className="text-slate-200 font-mono">{formatBytes(file.size)}</strong></span>
+            <HardDrive className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+            <span className="truncate">
+              Size:{" "}
+              <strong className="text-slate-200 font-mono">
+                {formatBytes(file.size)}
+              </strong>
+            </span>
           </div>
           <div className="flex items-center space-x-2 text-slate-400">
-            <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Modified: <strong className="text-slate-200 font-mono">{formatDate(file.lastModified).split(' ')[0]}</strong></span>
+            <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="truncate">
+              Modified:{" "}
+              <strong className="text-slate-200 font-mono">
+                {formatDate(file.lastModified).split(" ")[0]}
+              </strong>
+            </span>
           </div>
           <div className="flex items-center space-x-2 text-slate-400">
-            <FolderTree className="w-3.5 h-3.5 text-purple-400" />
-            <span>Format: <strong className="text-slate-200 uppercase font-mono">{file.extension || 'binary'}</strong></span>
+            <FolderTree className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <span className="truncate">
+              Format:{" "}
+              <strong className="text-slate-200 uppercase font-mono">
+                {file.extension || "binary"}
+              </strong>
+            </span>
           </div>
         </div>
 
         {/* Content Viewer */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-950">
-          {category === 'image' && file.previewUrl ? (
-            <div className="flex items-center justify-center p-4 bg-slate-900 rounded-xl border border-slate-800">
+        <div className="flex-1 overflow-y-auto p-6">
+          {category === "image" && file.previewUrl ? (
+            <div className="flex items-center justify-center p-4 surface-inset rounded-xl border border-subtle">
               <img
                 src={file.previewUrl}
                 alt={file.name}
@@ -146,7 +166,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
               />
             </div>
           ) : file.textContent ? (
-            <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 overflow-x-auto">
+            <div className="surface-inset rounded-xl p-4 border border-subtle overflow-x-auto">
               <pre className="font-mono text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
                 {file.textContent}
               </pre>
@@ -154,8 +174,13 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
           ) : (
             <div className="text-center py-12 text-slate-500">
               <File className="w-12 h-12 mx-auto mb-2 text-slate-600" />
-              <p className="text-sm font-medium text-slate-400">Binary or large file</p>
-              <p className="text-xs mt-1">Preview is not available for this format. You can download the stripped file directly.</p>
+              <p className="text-sm font-medium text-slate-400">
+                Binary or large file
+              </p>
+              <p className="text-xs mt-1">
+                Preview is not available for this format. You can download the
+                stripped file directly.
+              </p>
             </div>
           )}
         </div>
