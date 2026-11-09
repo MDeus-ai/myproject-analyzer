@@ -53,3 +53,19 @@ export interface PdfOptions {
   treeStyle: 'standard' | 'compact';
   themeColor: 'blue' | 'indigo' | 'emerald' | 'amber';
 }
+
+export interface ExcludedFolderInfo {
+  name: string;
+  path: string;
+  fileCount: number;
+  description: string;
+  category: 'dependencies' | 'vcs' | 'build' | 'cache' | 'env';
+}
+
+export interface FolderScanResult {
+  files: ProcessedFile[];
+  rootName: string;
+  detectedExclusions: ExcludedFolderInfo[];
+  totalExcludedFiles: number;
+  allRawFiles?: ProcessedFile[];
+}

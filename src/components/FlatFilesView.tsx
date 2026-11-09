@@ -212,10 +212,10 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
               key={cat.id}
               type="button"
               onClick={() => setSelectedCategory(cat.id)}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-colors whitespace-nowrap ${
+              className={`px-3 py-1 rounded-lg font-medium transition-all whitespace-nowrap cursor-pointer ${
                 selectedCategory === cat.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-md shadow-purple-600/30'
+                  : 'bg-[#181330] text-slate-300 hover:text-white hover:bg-[#221b44] border border-[#2b2252]'
               }`}
             >
               {cat.label}
@@ -225,22 +225,22 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
 
         {/* Sort & Actions */}
         <div className="flex items-center space-x-2">
-          <div className="flex items-center space-x-1 text-xs bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700/60 text-slate-300">
-            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+          <div className="flex items-center space-x-1 text-xs bg-[#16122d] px-2.5 py-1.5 rounded-lg border border-[#2d2552] text-slate-300">
+            <ArrowUpDown className="w-3.5 h-3.5 text-purple-400" />
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as any)}
               className="bg-transparent focus:outline-none cursor-pointer"
             >
-              <option value="name" className="bg-slate-900">Sort by Name</option>
-              <option value="size" className="bg-slate-900">Sort by Size</option>
-              <option value="date" className="bg-slate-900">Sort by Date</option>
-              <option value="ext" className="bg-slate-900">Sort by Extension</option>
+              <option value="name" className="bg-[#120e24]">Sort by Name</option>
+              <option value="size" className="bg-[#120e24]">Sort by Size</option>
+              <option value="date" className="bg-[#120e24]">Sort by Date</option>
+              <option value="ext" className="bg-[#120e24]">Sort by Extension</option>
             </select>
             <button
               type="button"
               onClick={() => setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
-              className="px-1 text-blue-400 hover:text-blue-300 font-mono font-bold"
+              className="px-1 text-purple-400 hover:text-purple-300 font-mono font-bold cursor-pointer"
               title="Toggle sort direction"
             >
               {sortOrder === 'asc' ? '↑' : '↓'}
@@ -251,7 +251,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
             type="button"
             onClick={onDownloadAllZip}
             disabled={isZipping || files.length === 0}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-sm transition-all active:scale-95 disabled:opacity-50"
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-medium text-xs shadow-md shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             <FileArchive className="w-3.5 h-3.5" />
             <span>{isZipping ? 'Archiving...' : 'Download Flat ZIP'}</span>
@@ -261,14 +261,14 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
 
       {/* Zipping Progress Bar */}
       {isZipping && zipProgress && (
-        <div className="bg-blue-950/80 border-b border-blue-900/60 px-6 py-2.5 flex items-center space-x-4">
-          <div className="flex-1 bg-slate-800 h-2 rounded-full overflow-hidden">
+        <div className="bg-purple-950/40 border-b border-purple-900/60 px-6 py-2.5 flex items-center space-x-4">
+          <div className="flex-1 bg-[#16122d] h-2 rounded-full overflow-hidden">
             <div
-              className="bg-blue-500 h-full transition-all duration-200 rounded-full"
+              className="bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400 h-full transition-all duration-200 rounded-full"
               style={{ width: `${zipProgress.percent}%` }}
             />
           </div>
-          <span className="text-xs text-blue-300 font-mono whitespace-nowrap">
+          <span className="text-xs text-purple-300 font-mono whitespace-nowrap">
             {zipProgress.percent}% • {zipProgress.currentFile}
           </span>
         </div>
@@ -283,10 +283,10 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
             <p className="text-slate-500 text-xs mt-1">Try adjusting your search or filters.</p>
           </div>
         ) : (
-          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
+          <div className="bg-[#110e24] rounded-2xl border border-[#27204b] overflow-hidden shadow-xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950/70 border-b border-slate-800 text-slate-400 font-medium">
+                <thead className="bg-[#0a0816] border-b border-[#241d44] text-slate-400 font-semibold uppercase tracking-wider text-[11px] font-sans">
                   <tr>
                     <th className="py-3 px-3 w-10 text-center">
                       <input
@@ -297,7 +297,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                         }
                         onChange={toggleSelectAll}
                         aria-label="Select all stripped files"
-                        className="rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0 cursor-pointer"
+                        className="rounded border-slate-700 bg-[#16122d] text-purple-500 focus:ring-0 cursor-pointer"
                       />
                     </th>
                     <th className="py-3 px-4">Stripped File Name (In Flat Root)</th>
@@ -308,7 +308,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                     <th className="py-3 px-3 text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono">
+                <tbody className="divide-y divide-[#1e183a] font-mono">
                   {filteredFiles.map(file => {
                     const isSelected = selectedFileIds.has(file.id);
                     const isRenamed = file.flattenedName !== file.originalName;
@@ -316,8 +316,8 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                     return (
                       <tr
                         key={file.id}
-                        className={`hover:bg-slate-850/60 transition-colors ${
-                          isSelected ? 'bg-blue-950/20' : ''
+                        className={`hover:bg-[#1a1436]/70 transition-colors ${
+                          isSelected ? 'bg-purple-950/30' : ''
                         }`}
                       >
                         {/* Checkbox */}
@@ -327,7 +327,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                             checked={isSelected}
                             onChange={() => toggleSelectFile(file.id)}
                             aria-label={`Select ${file.flattenedName}`}
-                            className="rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0 cursor-pointer"
+                            className="rounded border-slate-700 bg-[#16122d] text-purple-500 focus:ring-0 cursor-pointer"
                           />
                         </td>
 
@@ -337,7 +337,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                             <span className="shrink-0">{getCategoryIcon(file)}</span>
                             <span
                               className={`truncate max-w-xs ${
-                                isRenamed ? 'text-blue-300 font-semibold' : ''
+                                isRenamed ? 'text-purple-300 font-semibold' : ''
                               }`}
                               title={file.flattenedName}
                             >
@@ -345,7 +345,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                             </span>
                             {isRenamed && (
                               <span
-                                className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-sans border border-amber-500/30"
+                                className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-sans border border-amber-500/30 font-medium"
                                 title={`Original was: ${file.originalName}`}
                               >
                                 Renamed
@@ -377,7 +377,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
 
                         {/* Extension */}
                         <td className="py-2.5 px-3">
-                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] uppercase font-bold tracking-wider">
+                          <span className="px-2 py-0.5 rounded-full bg-purple-950/60 border border-purple-800/60 text-purple-300 text-[10px] font-mono uppercase font-bold tracking-wider">
                             {file.extension || 'FILE'}
                           </span>
                         </td>
@@ -398,7 +398,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                             <button
                               type="button"
                               onClick={() => onPreviewFile(file)}
-                              className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-slate-800 transition-colors"
+                              className="p-1 rounded text-slate-400 hover:text-purple-300 hover:bg-[#221a44] transition-colors"
                               title="Preview file content"
                             >
                               <Eye className="w-3.5 h-3.5" />
@@ -406,7 +406,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                             <button
                               type="button"
                               onClick={() => handleDownloadSingle(file)}
-                              className="p-1 rounded text-slate-400 hover:text-emerald-300 hover:bg-slate-800 transition-colors"
+                              className="p-1 rounded text-slate-400 hover:text-emerald-300 hover:bg-[#221a44] transition-colors"
                               title="Download this file stripped"
                             >
                               <Download className="w-3.5 h-3.5" />

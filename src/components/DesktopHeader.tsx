@@ -11,8 +11,10 @@ import {
   Download,
   ImageIcon,
   Code2,
+  ShieldAlert,
+  Home,
 } from 'lucide-react';
-import { FolderAnalysisStats } from '../types';
+import { FolderAnalysisStats, ExcludedFolderInfo } from '../types';
 
 interface DesktopHeaderProps {
   activeTab: 'files' | 'tree' | 'pdf' | 'analytics' | 'analyzer';
@@ -24,7 +26,10 @@ interface DesktopHeaderProps {
   onDownloadPdfClick: () => void;
   onDownloadImageClick?: () => void;
   onHelpClick: () => void;
+  onGoHomeClick?: () => void;
   isZipping?: boolean;
+  excludedFolders?: ExcludedFolderInfo[];
+  onReviewExclusionsClick?: () => void;
 }
 
 export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
@@ -37,55 +42,86 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
   onDownloadPdfClick,
   onDownloadImageClick,
   onHelpClick,
+  onGoHomeClick,
   isZipping,
+  excludedFolders,
+  onReviewExclusionsClick,
 }) => {
   return (
-    <header className="bg-slate-900 border-b border-slate-800 text-slate-200 select-none sticky top-0 z-40">
-      {/* Top simulated macOS window titlebar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800/80 bg-slate-950/60">
-        <div className="flex items-center space-x-2">
-          {/* Traffic lights */}
-          <div className="flex space-x-2 mr-3">
-            <span className="w-3 h-3 rounded-full bg-rose-500/80 inline-block border border-rose-600/40" />
-            <span className="w-3 h-3 rounded-full bg-amber-500/80 inline-block border border-amber-600/40" />
-            <span className="w-3 h-3 rounded-full bg-emerald-500/80 inline-block border border-emerald-600/40" />
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <div className="p-1 rounded bg-blue-600/20 text-blue-400">
+    <header className="bg-[#0e0c1a] border-b border-[#241f3d] text-slate-200 select-none sticky top-0 z-40">
+      {/* Top Application Bar */}
+      <div className="flex items-center justify-between px-4 sm:px-6 py-2.5 border-b border-[#1f1a36] bg-[#0a0815]/80 backdrop-blur-md">
+        <div className="flex items-center space-x-3">
+          {/* Logo & Brand title - clicking takes user to homepage */}
+          <button
+            type="button"
+            onClick={onGoHomeClick}
+            className="flex items-center space-x-2.5 text-left group hover:opacity-90 transition-opacity cursor-pointer"
+            title="Go to Homepage"
+          >
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 via-violet-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-purple-600/30 group-hover:scale-105 transition-transform">
               <FolderTree className="w-4 h-4" />
             </div>
-            <span className="font-semibold text-sm tracking-tight text-slate-100">
-              MyProject Analyzer
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700/60 font-mono">
-              v1.0 Desktop
-            </span>
-          </div>
+            <div className="flex items-center space-x-2">
+              <span className="font-bold text-sm sm:text-base tracking-tight text-white group-hover:text-purple-200 transition-colors">
+                MyProject Analyzer
+              </span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-950/60 text-purple-300 border border-purple-700/50 font-mono font-medium">
+                v1.0
+              </span>
+            </div>
+          </button>
         </div>
 
-        {/* Center: Current Folder Info Pill */}
+        {/* Center: Current Target Folder Pill */}
         <div className="hidden md:flex items-center space-x-2 text-xs">
           {stats ? (
-            <div className="flex items-center space-x-2 px-3 py-1 bg-slate-850 rounded-full border border-slate-700/60 text-slate-300">
+            <div className="flex items-center space-x-2 px-3 py-1 bg-[#16122a] rounded-full border border-[#2d254f] text-slate-300">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-slate-400">Target Folder:</span>
-              <span className="font-mono font-medium text-blue-300">{stats.rootName}</span>
-              <span className="text-slate-500">•</span>
+              <span className="font-mono font-medium text-purple-300">{stats.rootName}</span>
+              <span className="text-slate-600">•</span>
               <span className="text-slate-300">{stats.totalFiles} files</span>
             </div>
           ) : (
-            <span className="text-slate-500 italic">No folder opened</span>
+            <span className="text-slate-500 italic text-xs">No project opened</span>
+          )}
+
+          {excludedFolders && excludedFolders.length > 0 && (
+            <button
+              type="button"
+              onClick={onReviewExclusionsClick}
+              className="flex items-center space-x-1.5 px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 rounded-full border border-amber-500/30 text-amber-300 text-xs transition-colors cursor-pointer"
+              title="Click to view details about automatically excluded folders"
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+              <span>
+                Excluded ({excludedFolders.length}):{' '}
+                <strong className="font-mono">{excludedFolders.map(f => f.name).join(', ')}</strong>
+              </span>
+            </button>
           )}
         </div>
 
-        {/* Right window actions */}
+        {/* Right Header Actions */}
         <div className="flex items-center space-x-2">
+          {onGoHomeClick && (
+            <button
+              type="button"
+              onClick={onGoHomeClick}
+              className="flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-[#1a1532] transition-colors border border-[#241f3d]"
+              title="Return to Homepage"
+            >
+              <Home className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Home</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onLoadSampleClick}
             aria-label="Load demo folder"
-            className="flex items-center space-x-1.5 text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700/50"
+            className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#181330] hover:bg-[#201a40] text-purple-200 transition-colors border border-[#322858]"
             title="Load sample folder structure for instant testing"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -96,7 +132,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             type="button"
             onClick={onOpenFolderClick}
             aria-label="Open folder"
-            className="flex items-center space-x-1.5 text-xs px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors shadow-sm"
+            className="flex items-center space-x-1.5 text-xs px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-medium transition-all shadow-md shadow-purple-600/30 active:scale-95 cursor-pointer"
           >
             <FolderOpen className="w-3.5 h-3.5" />
             <span>Open Folder</span>
@@ -106,7 +142,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             type="button"
             onClick={onHelpClick}
             aria-label="Help and shortcuts"
-            className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[#1a1532] transition-colors"
             title="Shortcuts & Documentation"
           >
             <HelpCircle className="w-4 h-4" />
@@ -114,23 +150,23 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
         </div>
       </div>
 
-      {/* Main navigation toolbar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/90 backdrop-blur-sm">
+      {/* Main Navigation Toolbar (Tabs & Global Quick Exports) */}
+      <div className="flex items-center justify-between px-4 sm:px-6 py-2 bg-[#0e0c1a]/95 backdrop-blur-md">
         {/* Navigation Tabs */}
-        <nav className="flex space-x-1 sm:space-x-2" aria-label="Views">
+        <nav className="flex space-x-1 sm:space-x-1.5 overflow-x-auto py-0.5" aria-label="Views">
           <button
             type="button"
             onClick={() => setActiveTab('files')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === 'files'
-                ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-purple-600/25 text-purple-200 border border-purple-500/40 shadow-sm shadow-purple-600/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181330]'
             }`}
           >
-            <ListFilter className="w-4 h-4" />
+            <ListFilter className="w-4 h-4 text-purple-400" />
             <span>Stripped Files (Flat)</span>
             {stats && (
-              <span className="text-xs px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-300 font-mono">
+              <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300 font-mono font-semibold">
                 {stats.totalFiles}
               </span>
             )}
@@ -139,16 +175,16 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('tree')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === 'tree'
-                ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-indigo-600/25 text-indigo-200 border border-indigo-500/40 shadow-sm shadow-indigo-600/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181330]'
             }`}
           >
-            <FolderTree className="w-4 h-4" />
+            <FolderTree className="w-4 h-4 text-indigo-400" />
             <span>Directory Tree</span>
             {stats && (
-              <span className="text-xs px-1.5 py-0.2 rounded-full bg-indigo-500/20 text-indigo-300 font-mono">
+              <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-semibold">
                 {stats.totalFolders} dirs
               </span>
             )}
@@ -157,77 +193,74 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('pdf')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === 'pdf'
-                ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-emerald-600/25 text-emerald-200 border border-emerald-500/40 shadow-sm shadow-emerald-600/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181330]'
             }`}
           >
-            <FileText className="w-4 h-4" />
+            <FileText className="w-4 h-4 text-emerald-400" />
             <span>PDF Structure Architect</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('analytics')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === 'analytics'
-                ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-violet-600/25 text-violet-200 border border-violet-500/40 shadow-sm shadow-violet-600/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181330]'
             }`}
           >
-            <BarChart3 className="w-4 h-4" />
+            <BarChart3 className="w-4 h-4 text-violet-400" />
             <span className="hidden sm:inline">Stats</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('analyzer')}
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === 'analyzer'
-                ? 'bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                ? 'bg-cyan-600/25 text-cyan-200 border border-cyan-500/40 shadow-sm shadow-cyan-600/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181330]'
             }`}
           >
-            <Code2 className="w-4 h-4" />
+            <Code2 className="w-4 h-4 text-cyan-400" />
             <span>CodeFile Analyzer</span>
           </button>
         </nav>
 
         {/* Global Export Actions */}
         {stats && (
-          <div className="flex items-center space-x-2">
+          <div className="hidden sm:flex items-center space-x-2">
             <button
               type="button"
               onClick={onDownloadZipClick}
               disabled={isZipping}
-              aria-label="Download flattened files ZIP"
-              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-300 border border-blue-500/30 font-medium transition-all shadow-sm active:scale-95 disabled:opacity-50"
-              title="Download all files stripped of folders as a flat .zip archive"
+              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#1a1532] hover:bg-[#231c44] text-slate-200 transition-colors border border-[#2e2652]"
+              title="Download all stripped flat files as a ZIP archive"
             >
-              <FileArchive className="w-3.5 h-3.5 text-blue-400" />
-              <span>{isZipping ? 'Packing ZIP...' : 'Export Flat ZIP'}</span>
+              <FileArchive className="w-3.5 h-3.5 text-purple-400" />
+              <span>{isZipping ? 'Archiving...' : 'Export Flat ZIP'}</span>
             </button>
 
             {onDownloadImageClick && (
               <button
                 type="button"
                 onClick={onDownloadImageClick}
-                aria-label="Download Structure Image"
-                className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/30 font-medium transition-all shadow-sm active:scale-95"
-                title="Download directory structure & inventory as a high-resolution PNG image"
+                className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#1a1532] hover:bg-[#231c44] text-slate-200 transition-colors border border-[#2e2652]"
+                title="Go to PDF/Image Architect to download PNG/JPEG"
               >
                 <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">Export Image</span>
+                <span>Export Image</span>
               </button>
             )}
 
             <button
               type="button"
               onClick={onDownloadPdfClick}
-              aria-label="Download Structure PDF"
-              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-all shadow-sm active:scale-95"
-              title="Download directory structure & inventory as a vector PDF"
+              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white font-medium transition-all shadow-sm"
+              title="Generate and download directory structure PDF"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Download PDF</span>

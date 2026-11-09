@@ -1,15 +1,31 @@
-import { ProcessedFile } from '../types';
+import { ProcessedFile, FolderScanResult, ExcludedFolderInfo } from '../types';
 import { getFileExtension } from './fileHelpers';
+import {
+  DEFAULT_EXCLUSION_RULES,
+  filterFilesByExclusions,
+  matchExcludedSegment,
+} from './folderExclusions';
+
+export interface FolderReaderOptions {
+  excludedPatterns?: string[];
+  enableAutoExclusion?: boolean;
+}
 
 /**
- * Parses File objects from a webkitdirectory input into ProcessedFile array.
+ * Parses File objects from a webkitdirectory input into ProcessedFile array,
+ * automatically detecting and excluding heavy folders like node_modules.
  */
-export async function processFileList(fileList: FileList | File[]): Promise<{
-  files: ProcessedFile[];
-  rootName: string;
-}> {
-  const files: ProcessedFile[] = [];
+export async function processFileList(
+  fileList: FileList | File[],
+  options?: FolderReaderOptions
+): Promise<FolderScanResult> {
+  const allRawFiles: ProcessedFile[] = [];
   const array = Array.from(fileList);
+
+  const excludedPatterns =
+    options?.excludedPatterns ||
+    DEFAULT_EXCLUSION_RULES.filter(r => r.isDefault).map(r => r.pattern);
+  const enableAutoExclusion = options?.enableAutoExclusion !== false;
 
   let rootName = 'folder';
   if (array.length > 0) {
@@ -62,7 +78,7 @@ export async function processFileList(fileList: FileList | File[]): Promise<{
       }
     }
 
-    files.push({
+    allRawFiles.push({
       id: `file-${i}-${Date.now()}`,
       name,
       originalName: name,
@@ -80,17 +96,47 @@ export async function processFileList(fileList: FileList | File[]): Promise<{
     });
   }
 
-  return { files, rootName };
+  if (!enableAutoExclusion) {
+    return {
+      files: allRawFiles,
+      rootName,
+      detectedExclusions: [],
+      totalExcludedFiles: 0,
+      allRawFiles,
+    };
+  }
+
+  const { filteredFiles, detectedExclusions, totalSkipped } = filterFilesByExclusions(
+    allRawFiles,
+    excludedPatterns
+  );
+
+  return {
+    files: filteredFiles,
+    rootName,
+    detectedExclusions,
+    totalExcludedFiles: totalSkipped,
+    allRawFiles,
+  };
 }
 
 /**
- * Recursively scans files from HTML5 Drag and Drop DataTransferItem list
+ * Recursively scans files from HTML5 Drag and Drop DataTransferItem list,
+ * automatically bypassing heavy folders (e.g. node_modules, .git) for browser performance.
  */
 export async function readDroppedEntries(
-  items: DataTransferItemList
-): Promise<{ files: ProcessedFile[]; rootName: string }> {
+  items: DataTransferItemList,
+  options?: FolderReaderOptions
+): Promise<FolderScanResult> {
   const fileEntries: { file: File; path: string }[] = [];
+  const detectedExclusionsMap = new Map<string, { count: number; samplePath: string }>();
   let detectedRoot = '';
+
+  const excludedPatterns =
+    options?.excludedPatterns ||
+    DEFAULT_EXCLUSION_RULES.filter(r => r.isDefault).map(r => r.pattern);
+  const excludedSet = new Set(excludedPatterns.map(p => p.trim().toLowerCase()));
+  const enableAutoExclusion = options?.enableAutoExclusion !== false;
 
   const entries: any[] = [];
   for (let i = 0; i < items.length; i++) {
@@ -118,6 +164,30 @@ export async function readDroppedEntries(
       if (!detectedRoot && !path) {
         detectedRoot = entry.name;
       }
+
+      const dirName = entry.name;
+      const matched = matchExcludedSegment([dirName], excludedSet);
+
+      // If heavy folder like node_modules is detected and auto-exclusion is enabled,
+      // skip deep traversal to prevent browser freezing!
+      if (enableAutoExclusion && matched) {
+        const fullDirPath = path ? `${path}/${dirName}` : dirName;
+        // Count approximate direct child entries quickly
+        let childCount = 0;
+        try {
+          const dirReader = entry.createReader();
+          const batch: any[] = await new Promise((res, rej) => dirReader.readEntries(res, rej));
+          childCount = batch.length;
+        } catch {
+          childCount = 1;
+        }
+
+        const curr = detectedExclusionsMap.get(matched) || { count: 0, samplePath: fullDirPath };
+        curr.count += childCount || 1;
+        detectedExclusionsMap.set(matched, curr);
+        return; // Skip deep recursive traversal
+      }
+
       const dirReader = entry.createReader();
       const readAllEntries = async (): Promise<any[]> => {
         const batch: any[] = [];
@@ -148,7 +218,6 @@ export async function readDroppedEntries(
 
   const filesWithRelative: File[] = [];
   for (const item of fileEntries) {
-    // Attach webkitRelativePath property for compatibility
     Object.defineProperty(item.file, 'webkitRelativePath', {
       value: item.path.replace(/^\/+/, ''),
       writable: false,
@@ -156,9 +225,28 @@ export async function readDroppedEntries(
     filesWithRelative.push(item.file);
   }
 
-  const result = await processFileList(filesWithRelative);
+  const result = await processFileList(filesWithRelative, options);
   if (detectedRoot) {
     result.rootName = detectedRoot;
   }
+
+  // Merge directory-level exclusions detected during drag-and-drop traversal
+  for (const [name, data] of detectedExclusionsMap.entries()) {
+    const existing = result.detectedExclusions.find(e => e.name === name);
+    if (!existing) {
+      const rule = DEFAULT_EXCLUSION_RULES.find(
+        r => r.pattern.toLowerCase() === name.toLowerCase()
+      );
+      result.detectedExclusions.push({
+        name,
+        path: data.samplePath,
+        fileCount: data.count,
+        description: rule?.description || 'Heavy dependency or generated directory',
+        category: rule?.category || 'dependencies',
+      });
+      result.totalExcludedFiles += data.count;
+    }
+  }
+
   return result;
 }

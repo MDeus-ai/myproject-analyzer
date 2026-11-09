@@ -45,6 +45,12 @@ MyProject Analyzer allows developers to inspect nested codebases, strip away inn
   - Generates a unified master text file with an automatic Table of Contents, line numbers, and token count estimator.
   - Copy to clipboard or download as `.txt` / `.md`.
 
+### 6. 🛡️ Heavy Folder Auto-Exclusion & Pre-Import Warning
+- Automatically detects heavy dependency, version control, and build directories (`node_modules`, `.git`, `dist`, `build`, `.next`, `__pycache__`, `.venv`, `vendor`).
+- **Pre-Import Modal Warning**: Displays an interactive checklist with item counts and descriptions *before* the project is imported into memory, protecting against browser freezes and cluttered files.
+- **Selective Override**: Check or uncheck individual detected folders or choose "Include Everything" if needed.
+- **Live Exclusion Status Pill**: Top desktop header displays the number of excluded folders and skipped items with one-click review.
+
 ---
 
 ## 🚀 Quickstart

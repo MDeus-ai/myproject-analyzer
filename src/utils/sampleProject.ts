@@ -163,3 +163,82 @@ export function getSampleProjectFiles(): ProcessedFile[] {
     };
   });
 }
+
+/**
+ * Loads a project containing heavy folders (node_modules, .git, dist)
+ * to demonstrate the automatic exclusion detection and warning modal.
+ */
+export function getSampleProjectWithHeavyFolders(): ProcessedFile[] {
+  const clean = getSampleProjectFiles();
+  const heavyFiles: SampleTemplateFile[] = [
+    {
+      relativePath: 'acme-saas-platform/node_modules/react/index.js',
+      content: 'module.exports = require("./cjs/react.production.min.js");',
+      type: 'application/javascript',
+    },
+    {
+      relativePath: 'acme-saas-platform/node_modules/react/package.json',
+      content: '{\n  "name": "react",\n  "version": "19.0.0"\n}',
+      type: 'application/json',
+    },
+    {
+      relativePath: 'acme-saas-platform/node_modules/react-dom/index.js',
+      content: 'module.exports = require("./cjs/react-dom.production.min.js");',
+      type: 'application/javascript',
+    },
+    {
+      relativePath: 'acme-saas-platform/node_modules/lodash/lodash.js',
+      content: 'var lodash = function() {}; module.exports = lodash;',
+      type: 'application/javascript',
+    },
+    {
+      relativePath: 'acme-saas-platform/node_modules/express/index.js',
+      content: 'module.exports = require("./lib/express");',
+      type: 'application/javascript',
+    },
+    {
+      relativePath: 'acme-saas-platform/.git/config',
+      content: '[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n',
+      type: 'text/plain',
+    },
+    {
+      relativePath: 'acme-saas-platform/.git/HEAD',
+      content: 'ref: refs/heads/main\n',
+      type: 'text/plain',
+    },
+    {
+      relativePath: 'acme-saas-platform/dist/bundle.js',
+      content: '!function(){console.log("built bundle")}()',
+      type: 'application/javascript',
+    },
+  ];
+
+  const heavyProcessed: ProcessedFile[] = heavyFiles.map((item, index) => {
+    const segments = item.relativePath.split('/');
+    const name = segments[segments.length - 1];
+    const dirSegments = segments.slice(1, -1);
+    const directoryPath = dirSegments.join('/');
+
+    const blob = new Blob([item.content], { type: item.type });
+    const size = blob.size || item.content.length;
+    const extension = getFileExtension(name);
+
+    return {
+      id: `heavy-${index + 1}`,
+      name,
+      originalName: name,
+      flattenedName: name,
+      relativePath: item.relativePath,
+      pathSegments: segments,
+      directoryPath,
+      size,
+      type: item.type,
+      extension,
+      lastModified: Date.now() - (index * 3600000 * 2),
+      blob,
+      textContent: item.content,
+    };
+  });
+
+  return [...clean, ...heavyProcessed];
+}
