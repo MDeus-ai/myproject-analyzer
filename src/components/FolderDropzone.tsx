@@ -7,6 +7,7 @@ import {
   Sparkles,
   ShieldAlert,
   Code2,
+  FlaskConical,
 } from "lucide-react";
 import {
   readDroppedEntries,
@@ -14,21 +15,27 @@ import {
   ScanProgress,
 } from "../utils/folderReader";
 import { FolderScanResult } from "../types";
+import { SAMPLE_SCENARIOS, SampleScenarioId } from "../utils/sampleProject";
 
 interface FolderDropzoneProps {
   onScanResult: (result: FolderScanResult) => void;
   onLoadSample: () => void;
   onLoadSampleWithHeavyFolders?: () => void;
+  onLoadScenario?: (id: SampleScenarioId) => void;
   onScanProgress?: (progress: ScanProgress | null) => void;
   isLoading?: boolean;
+  /** Test scenarios are developer QA — rendered only behind ?dev=1. */
+  showScenarios?: boolean;
 }
 
 export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
   onScanResult,
   onLoadSample,
   onLoadSampleWithHeavyFolders,
+  onLoadScenario,
   onScanProgress,
   isLoading,
+  showScenarios,
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [errorStatus, setErrorStatus] = useState<string>("");
@@ -255,6 +262,56 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Test Scenarios — dev-only QA panel (?dev=1).
+              Expected-results checklists come from the static SAMPLE_SCENARIOS
+              list, so rendering these buttons never builds File objects
+              (previously getScenarioProject ran per scenario per render,
+              allocating the 600KB limits fixture on every drag-over flip). */}
+          {onLoadScenario && showScenarios && (
+            <div className="w-full pt-6 border-t border-subtle mt-6">
+              <details className="group rounded-xl surface-raised border border-subtle text-left">
+                <summary className="flex items-center space-x-2 p-3 cursor-pointer text-xs font-semibold text-cyan-300 list-none">
+                  <FlaskConical className="w-4 h-4 text-cyan-400" />
+                  <span>Test Scenarios — verify all fixes end-to-end</span>
+                  <span className="ml-auto text-slate-500 text-[10px] group-open:hidden">
+                    expand ▾
+                  </span>
+                  <span className="ml-auto hidden text-slate-500 text-[10px] group-open:inline">
+                    collapse ▴
+                  </span>
+                </summary>
+                <div className="px-3 pb-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {SAMPLE_SCENARIOS.map((scenario) => (
+                    <button
+                      key={scenario.id}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLoadScenario(scenario.id);
+                      }}
+                      title={`Expected results:\n• ${scenario.expected.join("\n• ")}`}
+                      className="text-left p-2.5 rounded-lg surface-inset border border-subtle hover:border-cyan-500/40 hover:bg-[var(--surface-hover)] transition-colors"
+                    >
+                      <span className="block text-[11px] font-semibold text-slate-200">
+                        {scenario.label}
+                      </span>
+                      <span className="block text-[10px] text-slate-500 mt-0.5 leading-tight">
+                        {scenario.verifies}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="px-3 pb-3 text-[10px] text-slate-500 leading-relaxed">
+                  Each scenario loads a synthetic project through the exact same
+                  scan pipeline as real folder imports (.gitignore parsing,
+                  exclusions, secrets detection, text reading), so what you see
+                  is what a real import would produce. Hover a button for the
+                  expected results checklist.
+                </p>
+              </details>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -74,4 +74,17 @@ export interface FolderScanResult {
   detectedExclusions: ExcludedFolderInfo[];
   totalExcludedFiles: number;
   allRawFiles?: ProcessedFile[];
+  /**
+   * Rebuild pool for the review modal: every scanned file. Both heavy
+   * folders and .gitignore groups are re-includable from here.
+   */
+  baseFiles?: ProcessedFile[];
+  /** Paths of files that may contain secrets (.env, credentials, etc.). */
+  detectedSecretFiles?: string[];
+  /**
+   * Files removed by .gitignore rules, each tagged with the rule pattern
+   * that removed it. The review modal groups these by rule so users can
+   * see — and optionally re-include — every single removal.
+   */
+  gitignoreRemovedFiles?: { file: ProcessedFile; pattern: string }[];
 }

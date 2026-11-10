@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   FolderUp,
   FolderTree,
@@ -10,27 +10,292 @@ import {
   Layers,
   ArrowRight,
   Zap,
+  Braces,
+  BookOpen,
+  FileCode2,
 } from "lucide-react";
 import { FolderScanResult } from "../types";
 import { FolderDropzone } from "./FolderDropzone";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { ScanProgress } from "../utils/folderReader";
+import { SampleScenarioId } from "../utils/sampleProject";
 
 interface HomePageProps {
   onScanResult: (result: FolderScanResult) => void;
   onLoadSample: () => void;
   onLoadSampleWithHeavyFolders: () => void;
+  onLoadScenario?: (id: SampleScenarioId) => void;
   onOpenFolderPicker: () => void;
   onScanProgress?: (progress: ScanProgress | null) => void;
+  showScenarios?: boolean;
 }
+
+/* ------------------------------------------------------------------ */
+/* CodeFile Analyzer spotlight: interactive format preview samples     */
+/* ------------------------------------------------------------------ */
+
+type AnalyzerPreviewId = "standard" | "compact" | "markdown" | "xml" | "jsonl";
+
+interface AnalyzerPreview {
+  id: AnalyzerPreviewId;
+  label: string;
+  ext: string;
+  badge: string;
+  content: React.ReactNode;
+}
+
+const ANALYZER_FORMAT_PREVIEWS: AnalyzerPreview[] = [
+  {
+    id: "standard",
+    label: "Standard",
+    ext: "txt",
+    badge: "Strict 3-Part Output",
+    content: (
+      <>
+        <div className="text-purple-400 font-bold">
+          ================================================================================
+          <br />
+          FILE LOCATION: src/components/Header.tsx
+          <br />
+          FILE NAME: Header.tsx
+          <br />
+          FILE TYPE: tsx (TypeScript React Component)
+          <br />
+          FILE SIZE: 82 Bytes | LINES: 4
+          <br />
+          ================================================================================
+        </div>
+        <div className="text-slate-100 pl-2 border-l border-purple-500/40">
+          export function Header() &#123;
+          <br />
+          &nbsp;&nbsp;return &lt;header className="p-4"&gt;Acme
+          SaaS&lt;/header&gt;;
+          <br />
+          &#125;
+        </div>
+        <div className="text-emerald-400 font-bold">
+          ================================================================================
+          <br />
+          END OF FILE: src/components/Header.tsx
+          <br />
+          ================================================================================
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "compact",
+    label: "Compact",
+    ext: "txt",
+    badge: "Token-Efficient",
+    content: (
+      <>
+        <div>
+          <span className="text-slate-600"># ---- </span>
+          <span className="text-cyan-300">src/components/Header.tsx</span>
+          <span className="text-slate-600"> ----</span>
+        </div>
+        <div className="text-slate-100">
+          export function Header() &#123;
+          <br />
+          &nbsp;&nbsp;return &lt;header className="p-4"&gt;Acme
+          SaaS&lt;/header&gt;;
+          <br />
+          &#125;
+        </div>
+        <div className="pt-2">
+          <span className="text-slate-600"># ---- </span>
+          <span className="text-cyan-300">src/config/auth.ts</span>
+          <span className="text-slate-600"> ----</span>
+        </div>
+        <div className="text-slate-100">
+          export const jwtOptions = &#123; expiresIn: "24h" &#125;;
+        </div>
+        <div className="text-slate-500 pt-2 text-[10px]">
+          No banners. No metadata blocks. Up to ~80% fewer tokens — the Analyzer
+          shows live per-format token estimates so you can see the savings.
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "markdown",
+    label: "Markdown",
+    ext: "md",
+    badge: "Docs-Ready",
+    content: (
+      <>
+        <div>
+          <span className="text-cyan-400 font-bold">### File: </span>
+          <span className="text-cyan-200">Header.tsx</span>
+        </div>
+        <div>
+          <span className="text-purple-400 font-semibold">
+            &gt; **Location**:{" "}
+          </span>
+          <span className="text-slate-200">`src/components/Header.tsx`</span>
+        </div>
+        <div>
+          <span className="text-purple-400 font-semibold">&gt; **Type**: </span>
+          <span className="text-slate-200">`tsx` (TypeScript React)</span>
+        </div>
+        <div className="text-slate-600">```tsx</div>
+        <div className="text-slate-100">
+          export function Header() &#123;
+          <br />
+          &nbsp;&nbsp;return &lt;header className="p-4"&gt;Acme
+          SaaS&lt;/header&gt;;
+          <br />
+          &#125;
+        </div>
+        <div className="text-slate-600">```</div>
+        <div className="text-emerald-400">
+          &lt;!-- END OF FILE: src/components/Header.tsx --&gt;
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "xml",
+    label: "XML",
+    ext: "xml",
+    badge: "CDATA-Safe",
+    content: (
+      <>
+        <div className="text-purple-400">
+          &lt;file path="src/components/Header.tsx" type="tsx" lines="4"&gt;
+        </div>
+        <div className="text-slate-600">&lt;![CDATA[</div>
+        <div className="text-slate-100 pl-2 border-l border-purple-500/40">
+          export function Header() &#123;
+          <br />
+          &nbsp;&nbsp;return &lt;header className="p-4"&gt;Acme
+          SaaS&lt;/header&gt;;
+          <br />
+          &#125;
+        </div>
+        <div className="text-slate-600">]]&gt;</div>
+        <div className="text-emerald-400">&lt;/file&gt;</div>
+        <div className="text-slate-500 pt-1 text-[10px]">
+          CDATA wrapping means raw &lt;tags&gt; inside TSX/HTML files can never
+          corrupt the document. Ideal for Claude-style structured prompts.
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "jsonl",
+    label: "JSONL",
+    ext: "jsonl",
+    badge: "Machine-Readable",
+    content: (
+      <>
+        <div className="text-slate-300 break-all">
+          &#123;<span className="text-cyan-400">"recordType":</span>
+          <span className="text-slate-200">"metadata"</span>,
+          <span className="text-cyan-400">"rootFolder":</span>
+          <span className="text-slate-200">"acme-saas-platform"</span>,
+          <span className="text-cyan-400">"fileCount":</span>
+          <span className="text-slate-200">24</span>&#125;
+        </div>
+        <div className="text-slate-300 break-all">
+          &#123;<span className="text-purple-400">"recordType":</span>
+          <span className="text-slate-200">"file"</span>,
+          <span className="text-purple-400">"path":</span>
+          <span className="text-slate-200">"src/components/Header.tsx"</span>,
+          <span className="text-purple-400">"fileType":</span>
+          <span className="text-slate-200">"tsx"</span>,
+          <span className="text-purple-400">"lines":</span>
+          <span className="text-slate-200">4</span>,
+          <span className="text-purple-400">"content":</span>
+          <span className="text-slate-200">
+            "export function Header() &#123; ... &#125;"
+          </span>
+          &#125;
+        </div>
+        <div className="text-slate-500 pt-1 text-[10px]">
+          Every line is an independently parseable JSON object — paste any
+          single line into a JSON validator and it passes. Built for LangChain,
+          LlamaIndex &amp; vector DB ingestion.
+        </div>
+      </>
+    ),
+  },
+];
+
+interface AnalyzerFormatCard {
+  id: string;
+  name: string;
+  ext: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconCls: string;
+  blurb: string;
+  bestFor: string;
+}
+
+const ANALYZER_FORMAT_CARDS: AnalyzerFormatCard[] = [
+  {
+    id: "standard",
+    name: "Standard",
+    ext: ".txt",
+    icon: FileText,
+    iconCls: "bg-purple-500/10 border-purple-500/25 text-purple-400",
+    blurb: "Full metadata banners, Table of Contents and END OF FILE markers.",
+    bestFor: "archival, audits & reviews",
+  },
+  {
+    id: "compact",
+    name: "Compact",
+    ext: ".txt",
+    icon: Zap,
+    iconCls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-400",
+    blurb: "Just a path header plus pristine code — up to ~80% fewer tokens.",
+    bestFor: "tight context windows",
+  },
+  {
+    id: "markdown",
+    name: "Markdown",
+    ext: ".md",
+    icon: BookOpen,
+    iconCls: "bg-cyan-500/10 border-cyan-500/25 text-cyan-400",
+    blurb:
+      "Headings, bullet metadata and fenced code blocks with language tags.",
+    bestFor: "GitHub, Notion & docs",
+  },
+  {
+    id: "xml",
+    name: "XML",
+    ext: ".xml",
+    icon: FileCode2,
+    iconCls: "bg-amber-500/10 border-amber-500/25 text-amber-400",
+    blurb: "CDATA-wrapped tags that raw TSX/HTML content can never corrupt.",
+    bestFor: "Claude-style prompts",
+  },
+  {
+    id: "jsonl",
+    name: "JSONL",
+    ext: ".jsonl",
+    icon: Braces,
+    iconCls: "bg-blue-500/10 border-blue-500/25 text-blue-400",
+    blurb: "One self-contained JSON record per line, content machine-pristine.",
+    bestFor: "RAG & vector DB ingestion",
+  },
+];
 
 export const HomePage: React.FC<HomePageProps> = ({
   onScanResult,
   onLoadSample,
   onLoadSampleWithHeavyFolders,
+  onLoadScenario,
   onOpenFolderPicker,
   onScanProgress,
 }) => {
+  const [analyzerPreviewId, setAnalyzerPreviewId] =
+    useState<AnalyzerPreviewId>("standard");
+  const activePreview =
+    ANALYZER_FORMAT_PREVIEWS.find((p) => p.id === analyzerPreviewId) ??
+    ANALYZER_FORMAT_PREVIEWS[0];
+
   return (
     <div className="min-h-screen bg-[var(--app-bg)] text-slate-100 flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-200">
       {/* Top Navbar
@@ -147,6 +412,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               onScanResult={onScanResult}
               onLoadSample={onLoadSample}
               onLoadSampleWithHeavyFolders={onLoadSampleWithHeavyFolders}
+              onLoadScenario={onLoadScenario}
               onScanProgress={onScanProgress}
             />
           </div>
@@ -291,13 +557,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                   Identifies relative file location from the project root and
                   detects language type. Wraps code into a strict 3-part
                   structured format (Metadata, Code, End Marker) and bundles
-                  multiple files with Table of Contents and token counts.
+                  multiple files with Table of Contents, live token estimates
+                  and five LLM-friendly export formats.
                 </p>
               </div>
               <div className="pt-3 border-t border-subtle flex items-center space-x-2 text-[11px] font-mono text-slate-400">
                 <span className="px-2 py-0.5 rounded surface-raised border border-subtle">
                   3-Part Metadata Format
                 </span>
+                <span>• 5 Export Formats</span>
               </div>
             </div>
 
@@ -367,8 +635,13 @@ export const HomePage: React.FC<HomePageProps> = ({
               <p className="text-sm text-slate-400 leading-relaxed mb-6">
                 Need to feed an entire codebase or selected modules into an AI
                 model, code audit, or documentation report? CodeFile Analyzer
-                automatically identifies root relative paths and formats each
-                file with the strict 3-part layout:
+                automatically identifies root relative paths, detects language
+                types, and wraps each file in a strict 3-part layout — then
+                exports the bundle in any of{" "}
+                <strong className="text-slate-200">
+                  five LLM-friendly formats
+                </strong>{" "}
+                with live token estimates for each.
               </p>
 
               <div className="space-y-3 mb-8">
@@ -431,46 +704,90 @@ export const HomePage: React.FC<HomePageProps> = ({
               </button>
             </div>
 
-            {/* Right preview box */}
+            {/* Right: interactive tabbed format preview */}
             <div className="rounded-2xl surface-card border border-chrome shadow-xl overflow-hidden font-mono text-xs">
-              <div className="px-4 py-2.5 surface-raised border-b border-chrome flex items-center justify-between text-slate-400">
-                <span className="text-[11px] text-purple-400">
-                  combined_analysis.txt
+              <div className="px-4 py-2.5 surface-raised border-b border-chrome flex items-center justify-between gap-2 text-slate-400">
+                <span className="text-[11px] text-purple-400 truncate">
+                  combined_analysis.{activePreview.ext}
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30">
-                  Strict 3-Part Output
+                <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30 whitespace-nowrap">
+                  {activePreview.badge}
                 </span>
               </div>
-              <div className="p-4 sm:p-5 text-slate-300 space-y-3 leading-relaxed overflow-x-auto text-[11px]">
-                <div className="text-purple-400 font-bold">
-                  ================================================================================
-                  <br />
-                  FILE LOCATION: src/components/Header.tsx
-                  <br />
-                  FILE NAME: Header.tsx
-                  <br />
-                  FILE TYPE: tsx (TypeScript React Component)
-                  <br />
-                  FILE SIZE: 82 Bytes | LINES: 4
-                  <br />
-                  ================================================================================
-                </div>
-                <div className="text-slate-100 pl-2 border-l border-purple-500/40">
-                  export function Header() &#123;
-                  <br />
-                  &nbsp;&nbsp;return &lt;header className="p-4"&gt;Acme
-                  SaaS&lt;/header&gt;;
-                  <br />
-                  &#125;
-                </div>
-                <div className="text-emerald-400 font-bold">
-                  ================================================================================
-                  <br />
-                  END OF FILE: src/components/Header.tsx
-                  <br />
-                  ================================================================================
-                </div>
+
+              {/* Format tab bar */}
+              <div className="px-3 py-2 flex items-center gap-1 overflow-x-auto border-b border-subtle">
+                {ANALYZER_FORMAT_PREVIEWS.map((preview) => (
+                  <button
+                    key={preview.id}
+                    type="button"
+                    onClick={() => setAnalyzerPreviewId(preview.id)}
+                    aria-pressed={analyzerPreviewId === preview.id}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-all cursor-pointer ${
+                      analyzerPreviewId === preview.id
+                        ? "surface-raised text-cyan-300 shadow-sm"
+                        : "text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    {preview.label}
+                  </button>
+                ))}
               </div>
+
+              <div className="p-4 sm:p-5 text-slate-300 space-y-2 leading-relaxed overflow-x-auto text-[11px] min-h-[260px]">
+                {activePreview.content}
+              </div>
+            </div>
+          </div>
+
+          {/* Five export formats explainer row */}
+          <div className="mt-10 pt-8 border-t border-subtle">
+            <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-100">
+                  Five Export Formats, One Bundle
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Switch formats instantly — live token estimates per format
+                  help you pick what fits your context window.
+                </p>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-1 rounded-lg surface-raised border border-subtle text-slate-400">
+                .txt • .md • .xml • .jsonl
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              {ANALYZER_FORMAT_CARDS.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <div
+                    key={card.id}
+                    className="p-4 rounded-xl surface-card border border-chrome hover:border-purple-500/40 transition-all flex flex-col"
+                  >
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div
+                        className={`p-1.5 rounded-lg border ${card.iconCls}`}
+                      >
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded surface-raised border border-subtle text-slate-400">
+                        {card.ext}
+                      </span>
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-100">
+                      {card.name}
+                    </h4>
+                    <p className="text-[11px] text-slate-400 leading-relaxed mt-1 flex-1">
+                      {card.blurb}
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-2.5 pt-2 border-t border-subtle">
+                      Best for:{" "}
+                      <span className="text-slate-300">{card.bestFor}</span>
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

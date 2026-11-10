@@ -5,6 +5,12 @@ import {
   filterFilesByExclusions,
   matchExcludedSegment,
 } from "./folderExclusions";
+import { isTextReadableFile, MAX_TEXT_READ_SIZE } from "./codeAnalyzer";
+import {
+  extractGitignoreRules,
+  filterFilesByGitignore,
+} from "./gitignoreParser";
+import { isSecretFile } from "./secretsDetector";
 
 /**
  * Progress events emitted while a project folder is being imported.
@@ -25,6 +31,166 @@ export interface FolderReaderOptions {
 }
 
 const PROGRESS_THROTTLE_MS = 60;
+const SNIFF_BYTES = 4096;
+
+/** MIME families that are never text — skipped without wasting a sniff read. */
+const BINARY_MIME_PREFIXES = ["image/", "audio/", "video/"];
+
+function isBinaryMime(mime: string): boolean {
+  return BINARY_MIME_PREFIXES.some((p) => mime.startsWith(p));
+}
+
+/**
+ * Pure byte-level text heuristic: NUL bytes are a near-certain binary tell,
+ * and text files contain almost no control characters besides \t \n \r.
+ */
+export function sniffTextBytes(bytes: Uint8Array): boolean {
+  if (bytes.length === 0) return true;
+  let control = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    if (b === 0) return false;
+    if (b < 9 || (b > 13 && b < 32)) control++;
+  }
+  return control / bytes.length < 0.05;
+}
+
+/** Sniffs the first 4 KB of a blob for binary signatures. */
+export async function sniffIsText(blob: Blob): Promise<boolean> {
+  try {
+    const buf = new Uint8Array(await blob.slice(0, SNIFF_BYTES).arrayBuffer());
+    return sniffTextBytes(buf);
+  } catch {
+    return false;
+  }
+}
+/**
+ * Reads a file's text when it is genuinely text. Fast-path: the
+ * identifyCodeFileType/MIME check. Slow-path: content sniffing, which
+ * catches text files the allowlist misses (.gradle, .tf, .cfg, .rst,
+ * extensionless files) and never mislabels binaries.
+ */
+export async function readTextIfReadable(
+  blob: Blob,
+  name: string,
+  mimeType: string,
+): Promise<string | undefined> {
+  if (blob.size > MAX_TEXT_READ_SIZE) return undefined;
+  if (isBinaryMime(mimeType)) return undefined;
+  try {
+    if (isTextReadableFile(name, mimeType)) {
+      return await blob.text();
+    }
+    if (await sniffIsText(blob)) {
+      return await blob.text();
+    }
+  } catch {
+    // Locked or unreadable file
+  }
+  return undefined;
+}
+
+/**
+ * Reads text content for files that were skipped at scan time (files inside
+ * auto-excluded heavy folders keep their Blob but no textContent). Called
+ * when the user opts such files back in via the exclusion modal, so they
+ * export with real content instead of a false "binary" placeholder.
+ */
+export async function hydrateTextContent(
+  files: ProcessedFile[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<ProcessedFile[]> {
+  const pending = files.filter((f) => f.textContent === undefined && f.blob);
+  const total = pending.length;
+  let done = 0;
+
+  for (const file of pending) {
+    const text = await readTextIfReadable(
+      file.blob as Blob,
+      file.name,
+      file.type,
+    );
+    if (text !== undefined) {
+      file.textContent = text;
+    }
+    done++;
+    if (onProgress && (done % 10 === 0 || done === total)) {
+      onProgress(done, total);
+    }
+    if (done % 50 === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Applies the full post-scan filter pipeline: heavy-folder exclusion
+ * detection, .gitignore rules, and secrets detection.
+ *
+ * ORDER MATTERS: heavy-folder detection runs FIRST, across every scanned
+ * file. A folder named in BOTH the hardcoded list and .gitignore
+ * (node_modules/, dist/, ...) is classified as a heavy folder — shown
+ * once, in the heavy section. Files .gitignore removes from regular
+ * directories are tracked individually (rule-tagged) so the review modal
+ * can list them all and let the user re-include any of them.
+ */
+export function applyScanFilters(
+  allRawFiles: ProcessedFile[],
+  rootName: string,
+  options?: {
+    excludedPatterns?: string[];
+    enableAutoExclusion?: boolean;
+  },
+): FolderScanResult {
+  const excludedPatterns =
+    options?.excludedPatterns ||
+    DEFAULT_EXCLUSION_RULES.filter((r) => r.isDefault).map((r) => r.pattern);
+  const enableAutoExclusion = options?.enableAutoExclusion !== false;
+
+  const gitignoreRules = extractGitignoreRules(allRawFiles, rootName);
+
+  // 1) Heavy-folder exclusion detection on ALL files (visible + toggleable).
+  let detectedExclusions: FolderScanResult["detectedExclusions"] = [];
+  let heavySkipped = 0;
+  let afterHeavy = allRawFiles;
+  if (enableAutoExclusion) {
+    const ex = filterFilesByExclusions(allRawFiles, excludedPatterns);
+    detectedExclusions = ex.detectedExclusions;
+    heavySkipped = ex.totalSkipped;
+    afterHeavy = ex.filteredFiles;
+  }
+
+  // 2) .gitignore applies to everything the heavy-folder filter kept.
+  //    Each removal is tracked with its rule for the review modal.
+  let files = afterHeavy;
+  let gitignoreRemoved: { file: ProcessedFile; pattern: string }[] = [];
+  if (gitignoreRules.length > 0) {
+    const gi = filterFilesByGitignore(afterHeavy, gitignoreRules, rootName);
+    files = gi.filteredFiles;
+    gitignoreRemoved = gi.removed;
+  }
+
+  // 3) Secrets detection on the files that will actually be imported — a
+  //    .env inside an excluded heavy folder shouldn't trigger the warning.
+  const detectedSecretFiles = files
+    .filter((f) => isSecretFile(f.name))
+    .map((f) => f.relativePath);
+
+  return {
+    files,
+    rootName,
+    detectedExclusions,
+    totalExcludedFiles: heavySkipped + gitignoreRemoved.length,
+    allRawFiles,
+    // Everything is re-includable through the modal, so the rebuild pool
+    // is the full scan. The modal itself applies the active exclusions.
+    baseFiles: allRawFiles,
+    detectedSecretFiles,
+    gitignoreRemovedFiles: gitignoreRemoved,
+  };
+}
 
 /**
  * Parses File objects from a webkitdirectory input into ProcessedFile array,
@@ -88,39 +254,18 @@ export async function processFileList(
 
     // Files inside auto-excluded heavy folders keep their Blob (so the user
     // can still include them later) but skip expensive text/preview reads.
+    // hydrateTextContent() fills their content in if they get included.
     const isExcluded =
       enableAutoExclusion && matchExcludedSegment(parts, excludedSet) !== null;
 
     let textContent: string | undefined;
     let previewUrl: string | undefined;
 
-    // Read preview text if small text/code file
-    if (
-      !isExcluded &&
-      file.size < 50000 &&
-      (file.type.startsWith("text/") ||
-        file.type === "application/json" ||
-        file.type === "application/javascript" ||
-        [
-          "md",
-          "txt",
-          "ts",
-          "tsx",
-          "js",
-          "json",
-          "css",
-          "html",
-          "py",
-          "sh",
-          "csv",
-          "svg",
-        ].includes(extension))
-    ) {
-      try {
-        textContent = await file.text();
-      } catch {
-        // Ignore reading error for binary or locked files
-      }
+    // Content-based readability: code/dotfile fast-path first, NUL-byte
+    // sniffing for everything else (.gradle, .tf, .cfg, .rst, unknown
+    // extensions, empty-MIME files like .env.example/.go/.rs), 512KB cap.
+    if (!isExcluded) {
+      textContent = await readTextIfReadable(file, name, file.type || "");
     }
 
     // Generate object URL for image previews
@@ -152,26 +297,8 @@ export async function processFileList(
     emitProgress(i + 1, name);
   }
 
-  if (!enableAutoExclusion) {
-    return {
-      files: allRawFiles,
-      rootName,
-      detectedExclusions: [],
-      totalExcludedFiles: 0,
-      allRawFiles,
-    };
-  }
-
-  const { filteredFiles, detectedExclusions, totalSkipped } =
-    filterFilesByExclusions(allRawFiles, excludedPatterns);
-
-  return {
-    files: filteredFiles,
-    rootName,
-    detectedExclusions,
-    totalExcludedFiles: totalSkipped,
-    allRawFiles,
-  };
+  // Shared filter pipeline (gitignore + exclusions + secrets detection)
+  return applyScanFilters(allRawFiles, rootName, options);
 }
 
 /**

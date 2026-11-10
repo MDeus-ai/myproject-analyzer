@@ -1,6 +1,6 @@
 /**
  * @license
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: MIT
  */
 
 import React, {
@@ -25,8 +25,6 @@ import { ImportProgressOverlay } from "./components/ImportProgressOverlay";
 
 import {
   CollisionStrategy,
-  FolderAnalysisStats,
-  FolderNode,
   ProcessedFile,
   FolderScanResult,
   ExcludedFolderInfo,
@@ -39,20 +37,15 @@ import {
   ZipProgress,
 } from "./utils/zipExporter";
 import { generateFolderPdf, downloadPdf } from "./utils/pdfGenerator";
-import {
-  getSampleProjectFiles,
-  getSampleProjectWithHeavyFolders,
-} from "./utils/sampleProject";
+import { getScenarioProject, SampleScenarioId } from "./utils/sampleProject";
 import { processFileList, ScanProgress } from "./utils/folderReader";
-import {
-  DEFAULT_EXCLUSION_RULES,
-  filterFilesByExclusions,
-} from "./utils/folderExclusions";
+import { isSecretFile } from "./utils/secretsDetector";
 import { ShieldAlert, ArrowRight, CheckCircle2, X } from "lucide-react";
 
 interface ImportToast {
   rootName: string;
   fileCount: number;
+  gitignoreSkipped?: number;
 }
 
 export default function App() {
@@ -77,6 +70,13 @@ export default function App() {
     useState<FolderScanResult | null>(null);
   const [isExclusionModalOpen, setIsExclusionModalOpen] = useState(false);
 
+  // Files kept out by .gitignore after the user's review choices — tracked
+  // separately from heavy folders so the banner can report both honestly.
+  const [gitignoreExcludedCount, setGitignoreExcludedCount] = useState(0);
+
+  // Secrets detection state
+  const [detectedSecretFiles, setDetectedSecretFiles] = useState<string[]>([]);
+
   // Import progress & success feedback
   const [importProgress, setImportProgress] = useState<ScanProgress | null>(
     null,
@@ -89,6 +89,13 @@ export default function App() {
 
   // Hidden folder input ref
   const folderInputRef = useRef<HTMLInputElement>(null);
+
+  // Test scenarios are developer QA — only surfaced behind ?dev=1 so the
+  // panel (and its fixture-building code paths) stays out of the normal UI.
+  const showScenarios = useMemo(
+    () => new URLSearchParams(window.location.search).get("dev") === "1",
+    [],
+  );
 
   // Compute resolved flattened files based on selected collision strategy
   const { resolvedFiles, collisionCount } = useMemo(() => {
@@ -122,79 +129,131 @@ export default function App() {
 
   // Handle files loaded from picker or drag-drop
   const handleFilesLoaded = useCallback(
-    (files: ProcessedFile[], folderName: string) => {
+    (files: ProcessedFile[], folderName: string, gitignoreSkipped = 0) => {
       setRawFiles(files);
       setRootFolderName(folderName);
       setActiveTab("files");
       setCurrentView("workspace");
-      setImportToast({ rootName: folderName, fileCount: files.length });
+      setImportToast({
+        rootName: folderName,
+        fileCount: files.length,
+        gitignoreSkipped,
+      });
     },
     [],
   );
 
-  // Intercept incoming scans to detect node_modules or heavy folders before importing
+  // Intercept incoming scans before importing.
+  //
+  // Nothing is excluded silently: the review modal opens whenever ANYTHING
+  // was left out — heavy folders (node_modules, .git, ...) OR files matched
+  // by the project's own .gitignore — listing every excluded group with its
+  // files and letting the user re-include any of them.
   const handleScanResult = useCallback(
     (scanResult: FolderScanResult) => {
-      if (
+      setDetectedSecretFiles(scanResult.detectedSecretFiles || []);
+      const hasHeavy =
         scanResult.detectedExclusions &&
-        scanResult.detectedExclusions.length > 0
-      ) {
-        // Warn user before importing!
+        scanResult.detectedExclusions.length > 0;
+      const hasGitignoreRemovals =
+        (scanResult.gitignoreRemovedFiles?.length ?? 0) > 0;
+
+      if (hasHeavy || hasGitignoreRemovals) {
         setPendingScanResult(scanResult);
         setIsExclusionModalOpen(true);
       } else {
-        // Direct clean import
+        // Direct clean import — zero exclusions of any kind
         setExcludedFolders([]);
-        handleFilesLoaded(scanResult.files, scanResult.rootName);
+        setGitignoreExcludedCount(0);
+        handleFilesLoaded(scanResult.files, scanResult.rootName, 0);
       }
     },
     [handleFilesLoaded],
   );
 
-  // User confirmed import choices in ExclusionWarningModal
+  // User confirmed their choices in the review modal
   const handleConfirmExclusionImport = useCallback(
     (
       selectedFiles: ProcessedFile[],
       activeExclusions: ExcludedFolderInfo[],
+      gitignoreCount: number,
     ) => {
       setExcludedFolders(activeExclusions);
+      setGitignoreExcludedCount(gitignoreCount);
+      // Recompute the secrets banner from the files actually approved —
+      // re-included groups (heavy folders, .gitignore-removed .env*) are
+      // caught here, and removed ones no longer keep the banner alive.
+      setDetectedSecretFiles(
+        selectedFiles
+          .filter((f) => isSecretFile(f.name))
+          .map((f) => f.relativePath),
+      );
       if (pendingScanResult) {
-        handleFilesLoaded(selectedFiles, pendingScanResult.rootName);
+        handleFilesLoaded(
+          selectedFiles,
+          pendingScanResult.rootName,
+          gitignoreCount,
+        );
       }
       setIsExclusionModalOpen(false);
     },
     [handleFilesLoaded, pendingScanResult],
   );
 
-  // Cancel pre-import modal
+  // Cancel review modal
   const handleCancelExclusionImport = useCallback(() => {
     setIsExclusionModalOpen(false);
     setPendingScanResult(null);
   }, []);
 
+  // ------------------------------------------------------------------
+  // Sample & scenario loading.
+  //
+  // CRITICAL: scenarios are File objects and MUST go through
+  // processFileList() — the same production reader used by real folder
+  // imports. This is what makes them genuine tests of the reader's
+  // text-reading gate, size cap, gitignore parsing, and secrets
+  // detection. Handing ProcessedFile objects straight to the app would
+  // bypass all of it.
+  // ------------------------------------------------------------------
+  const loadScenario = useCallback(
+    async (scenarioId: SampleScenarioId) => {
+      const scenario = getScenarioProject(scenarioId);
+      setImportProgress({
+        phase: "reading",
+        processed: 0,
+        total: scenario.files.length,
+        currentFile: "",
+      });
+      try {
+        const result = await processFileList(scenario.files, {
+          onProgress: setImportProgress,
+        });
+        handleScanResult(result);
+      } finally {
+        setImportProgress(null);
+      }
+    },
+    [handleScanResult],
+  );
+
   // Load sample demo project (clean)
   const handleLoadSample = useCallback(() => {
-    const sampleFiles = getSampleProjectFiles();
-    setExcludedFolders([]);
-    handleFilesLoaded(sampleFiles, "acme-saas-platform");
-  }, [handleFilesLoaded]);
+    void loadScenario("clean");
+  }, [loadScenario]);
 
-  // Load sample demo project with heavy folders (node_modules, .git, dist) to test the warning modal
+  // Load sample demo project with heavy folders (node_modules, .git, dist)
   const handleLoadSampleWithHeavy = useCallback(() => {
-    const heavySample = getSampleProjectWithHeavyFolders();
-    const patterns = DEFAULT_EXCLUSION_RULES.filter((r) => r.isDefault).map(
-      (r) => r.pattern,
-    );
-    const { filteredFiles, detectedExclusions, totalSkipped } =
-      filterFilesByExclusions(heavySample, patterns);
-    handleScanResult({
-      files: filteredFiles,
-      rootName: "acme-saas-platform",
-      detectedExclusions,
-      totalExcludedFiles: totalSkipped,
-      allRawFiles: heavySample,
-    });
-  }, [handleScanResult]);
+    void loadScenario("heavy");
+  }, [loadScenario]);
+
+  // Load a test scenario
+  const handleLoadScenario = useCallback(
+    (scenarioId: SampleScenarioId) => {
+      void loadScenario(scenarioId);
+    },
+    [loadScenario],
+  );
 
   // Check URL query parameters for ?autostart=1
   useEffect(() => {
@@ -367,8 +426,10 @@ export default function App() {
             onScanResult={handleScanResult}
             onLoadSample={handleLoadSample}
             onLoadSampleWithHeavyFolders={handleLoadSampleWithHeavy}
+            onLoadScenario={handleLoadScenario}
             onOpenFolderPicker={() => folderInputRef.current?.click()}
             onScanProgress={setImportProgress}
+            showScenarios={showScenarios}
           />
         </div>
       ) : (
@@ -395,30 +456,59 @@ export default function App() {
             }}
           />
 
-          {/* Persistent warning banner when folders were auto-excluded */}
-          {excludedFolders.length > 0 && resolvedFiles.length > 0 && (
-            <div className="bg-warn-soft border-b border-warn px-4 py-1.5 flex items-center justify-between text-xs text-warn">
-              <div className="flex items-center space-x-2">
-                <ShieldAlert className="w-4 h-4 text-warn shrink-0" />
-                <span>
-                  <strong>Auto-Excluded Heavy Folders:</strong>{" "}
-                  {excludedFolders
-                    .map((f) => `${f.name}/ (~${f.fileCount} items)`)
-                    .join(", ")}
-                  . Third-party dependencies and build caches were kept out to
-                  ensure instant loading and clean output.
-                </span>
-              </div>
+          {/* Persistent banner listing everything that was excluded —
+              both categories, with a way back to the review modal */}
+          {(excludedFolders.length > 0 || gitignoreExcludedCount > 0) &&
+            resolvedFiles.length > 0 && (
+              <div className="bg-warn-soft border-b border-warn px-4 py-1.5 flex items-center justify-between text-xs text-warn">
+                <div className="flex items-center space-x-2">
+                  <ShieldAlert className="w-4 h-4 text-warn shrink-0" />
+                  <span>
+                    {excludedFolders.length > 0 && (
+                      <>
+                        <strong>Auto-Excluded Heavy Folders:</strong>{" "}
+                        {excludedFolders
+                          .map((f) => `${f.name}/ (~${f.fileCount} items)`)
+                          .join(", ")}
+                        .{" "}
+                      </>
+                    )}
+                    {gitignoreExcludedCount > 0 && (
+                      <>
+                        <strong>{gitignoreExcludedCount} file(s)</strong>{" "}
+                        excluded via .gitignore.{" "}
+                      </>
+                    )}
+                    Excluded items were kept out to ensure instant loading and
+                    clean output.
+                  </span>
+                </div>
 
-              {pendingScanResult && (
-                <button
-                  type="button"
-                  onClick={() => setIsExclusionModalOpen(true)}
-                  className="text-amber-400 hover:text-amber-300 underline font-medium ml-4 shrink-0 cursor-pointer"
-                >
-                  Modify Exclusions
-                </button>
-              )}
+                {pendingScanResult && (
+                  <button
+                    type="button"
+                    onClick={() => setIsExclusionModalOpen(true)}
+                    className="text-amber-400 hover:text-amber-300 underline font-medium ml-4 shrink-0 cursor-pointer"
+                  >
+                    Review Exclusions
+                  </button>
+                )}
+              </div>
+            )}
+
+          {/* Persistent warning banner when possible secrets were detected */}
+          {detectedSecretFiles.length > 0 && resolvedFiles.length > 0 && (
+            <div className="bg-rose-500/10 border-b border-rose-500/30 px-4 py-1.5 flex items-center space-x-2 text-xs text-rose-300">
+              <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>
+                <strong>Possible secrets detected:</strong>{" "}
+                {detectedSecretFiles.slice(0, 3).join(", ")}
+                {detectedSecretFiles.length > 3
+                  ? ` +${detectedSecretFiles.length - 3} more`
+                  : ""}
+                . These files will be included in exports — review before
+                sharing output with AI tools.
+              </span>
             </div>
           )}
 
@@ -431,7 +521,9 @@ export default function App() {
                   onScanResult={handleScanResult}
                   onLoadSample={handleLoadSample}
                   onLoadSampleWithHeavyFolders={handleLoadSampleWithHeavy}
+                  onLoadScenario={handleLoadScenario}
                   onScanProgress={setImportProgress}
+                  showScenarios={showScenarios}
                 />
               </div>
             ) : (
@@ -485,15 +577,17 @@ export default function App() {
         </div>
       )}
 
-      {/* Pre-Import Exclusion Warning Modal */}
+      {/* Exclusion Review Modal — lists every excluded group (heavy folders
+          and .gitignore rule groups) with its files; each re-includable.
+          Rebuilds from baseFiles, which contains every scanned file. */}
       {pendingScanResult && (
         <ExclusionWarningModal
           isOpen={isExclusionModalOpen}
           rootName={pendingScanResult.rootName}
           detectedExclusions={pendingScanResult.detectedExclusions}
-          totalExcludedFiles={pendingScanResult.totalExcludedFiles}
           cleanFiles={pendingScanResult.files}
-          allRawFiles={pendingScanResult.allRawFiles}
+          baseFiles={pendingScanResult.baseFiles}
+          gitignoreRemovedFiles={pendingScanResult.gitignoreRemovedFiles}
           onConfirmImport={handleConfirmExclusionImport}
           onCancel={handleCancelExclusionImport}
         />
@@ -525,6 +619,9 @@ export default function App() {
               <span className="font-mono text-slate-200">
                 {importToast.rootName}
               </span>
+              {importToast.gitignoreSkipped
+                ? ` · ${importToast.gitignoreSkipped} excluded via .gitignore`
+                : ""}
             </p>
           </div>
           <button
