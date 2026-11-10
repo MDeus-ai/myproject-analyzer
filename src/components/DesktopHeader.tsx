@@ -451,8 +451,9 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
           inline in row 1 instead (see below). */}
       {/* Inline tabs — wide screens only (xl+), where they genuinely fit.
             On narrower screens the dedicated second row above is used. */}
+      {/* Tab bar — always rendered: row 2 on narrow screens, inline on xl+ */}
       <nav
-        className="hidden xl:flex flex-1 min-w-0 items-center gap-1 overflow-x-auto scrollbar-none scroll-fade-x py-0.5"
+        className="flex items-center gap-1 overflow-x-auto scrollbar-none scroll-fade-x px-3 sm:px-5 py-1.5"
         aria-label="Views"
       >
         {TABS.map((tab) => {
@@ -466,14 +467,14 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
               onClick={() => setActiveTab(tab.id)}
               aria-current={isActive ? "page" : undefined}
               title={tab.label}
-              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap border ${
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap border shrink-0 ${
                 isActive
                   ? "chip-accent"
                   : "text-slate-400 border-transparent hover:text-slate-200 hover:bg-[var(--surface-hover)]"
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
+              <span className="hidden md:inline">{tab.label}</span>
               {badge && (
                 <span
                   className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-medium border ${
@@ -484,7 +485,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
                 >
                   {badge}
                 </span>
-              )}
+              )}{" "}
             </button>
           );
         })}
