@@ -308,7 +308,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                   }
                   className={`flex items-center space-x-1.5 p-2 rounded-xl border transition-all ${
                     pdfOptions.themeColor === th.id
-                      ? "border-emerald-400 bg-slate-800 shadow-sm"
+                      ? "chip-accent shadow-sm"
                       : "border-slate-800 bg-slate-950/60 hover:bg-slate-800"
                   }`}
                 >
@@ -330,7 +330,8 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               <span>Tree Typography</span>
             </span>
 
-            {/* Font family */}
+            {/* Font family — selected chip follows the active theme palette
+                and stays readable in light mode (chip-accent helper). */}
             <div className="grid grid-cols-3 gap-2">
               {TREE_FONT_OPTIONS.map((font) => (
                 <button
@@ -341,7 +342,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                   }
                   className={`p-2 rounded-xl border text-center transition-all ${
                     pdfOptions.treeFont === font.id
-                      ? "border-emerald-500 bg-emerald-950/30 text-emerald-300 font-semibold"
+                      ? "chip-accent font-semibold"
                       : "border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200"
                   }`}
                 >
@@ -360,7 +361,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-slate-300 font-medium">Font Size</span>
-                <span className="font-mono text-[11px] text-emerald-400">
+                <span className="font-mono text-[11px] text-accent">
                   {pdfOptions.treeFontSize.toFixed(1)} pt
                 </span>
               </div>
@@ -377,7 +378,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                   }))
                 }
                 aria-label="Tree font size in points"
-                className="w-full h-1.5 rounded-full bg-slate-800 accent-emerald-500 cursor-pointer"
+                className="w-full h-1.5 rounded-full bg-slate-800 slider-accent cursor-pointer"
               />
               <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1 font-mono">
                 <span>7 pt</span>
@@ -509,8 +510,8 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                 }
                 className={`p-2 rounded-xl border text-center transition-all ${
                   pdfOptions.treeStyle === "standard"
-                    ? "border-emerald-500 bg-emerald-950/30 text-emerald-300 font-semibold"
-                    : "border-slate-800 bg-slate-950 text-slate-400"
+                    ? "chip-accent font-semibold"
+                    : "border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200"
                 }`}
               >
                 Standard
@@ -522,8 +523,8 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                 }
                 className={`p-2 rounded-xl border text-center transition-all ${
                   pdfOptions.treeStyle === "compact"
-                    ? "border-emerald-500 bg-emerald-950/30 text-emerald-300 font-semibold"
-                    : "border-slate-800 bg-slate-950 text-slate-400"
+                    ? "chip-accent font-semibold"
+                    : "border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200"
                 }`}
               >
                 Compact
@@ -606,7 +607,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                 <span className="text-slate-600">•</span>
                 <span>{pdfMeta.sizeKb} KB</span>
                 <span className="text-slate-600">•</span>
-                <span className="text-emerald-400/80">A4 Vector</span>
+                <span className="text-ok">A4 Vector</span>
               </span>
             )}
           </div>

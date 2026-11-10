@@ -6,9 +6,13 @@ import type { AnalyzerStyle } from "../utils/codeAnalyzer";
  *
  * The copied/downloaded text stays untouched plain text — this component only
  * re-renders the preview with color coding so the structure is scannable.
- * Supports all five format presets: Standard, Compact, Markdown, XML and
- * JSONL. When `format` is omitted it falls back to heuristic detection of
+ * Supports all six format presets: Standard, Compact, Markdown, XML, JSONL
+ * and JSON. When `format` is omitted it falls back to heuristic detection of
  * the Standard/Markdown/XML layouts.
+ *
+ * Accent spans use the adaptive helper classes (text-info / text-ok /
+ * text-accent / text-warn / text-danger) so the preview stays readable in
+ * light mode and follows the active color palette.
  */
 
 const SEPARATOR_RE = /^={10,}$/;
@@ -38,11 +42,70 @@ const JSONL_KEY_SPLIT_RE =
 const JSONL_KEY_TEST_RE =
   /^"(?:recordType|rootFolder|fileCount|exportedAt|files|path|name|fileType|language|category|size|lines|content)":$/;
 
+// JSON document keys: top-level document keys vs per-file record keys.
+const JSON_LINE_RE = /^(\s*)"([A-Za-z]+)":\s?(.*)$/;
+const JSON_TOP_KEYS = new Set([
+  "rootFolder",
+  "fileCount",
+  "exportedAt",
+  "files",
+]);
+const JSON_STRUCTURAL = new Set(["{", "}", "[", "]", "},", "],"]);
+
 /** Above this many lines the highlighter falls back to plain rendering. */
 const MAX_HIGHLIGHT_LINES = 12000;
 
 function span(cls: string, text: string): React.ReactNode {
   return <span className={cls}>{text}</span>;
+}
+
+/** Colors a JSON scalar value by type (string / number / boolean). */
+function renderJsonValue(raw: string): React.ReactNode {
+  const comma = raw.endsWith(",") ? "," : "";
+  const value = comma ? raw.slice(0, -1) : raw;
+  let cls = "text-slate-300";
+  if (value.startsWith('"')) cls = "text-slate-200";
+  else if (/^-?\d/.test(value)) cls = "text-warn";
+  else if (/^(true|false|null)$/.test(value)) cls = "text-danger";
+  else if (value === "[" || value === "{") cls = "text-slate-500";
+  return (
+    <>
+      <span className={cls}>{value}</span>
+      {comma}
+    </>
+  );
+}
+
+/** JSON: cyan document keys, purple record keys, typed value colors. */
+function renderJson(lines: string[]): React.ReactNode[] {
+  return lines.map((line, i) => {
+    const m = line.match(JSON_LINE_RE);
+    let node: React.ReactNode;
+    if (m) {
+      node = (
+        <>
+          {m[1]}
+          <span
+            className={JSON_TOP_KEYS.has(m[2]) ? "text-info" : "text-accent"}
+          >
+            "{m[2]}"
+          </span>
+          <span className="text-slate-500">: </span>
+          {renderJsonValue(m[3])}
+        </>
+      );
+    } else if (JSON_STRUCTURAL.has(line.trim())) {
+      node = span("text-slate-500", line);
+    } else {
+      node = span("text-slate-400", line);
+    }
+    return (
+      <React.Fragment key={i}>
+        {node}
+        {"\n"}
+      </React.Fragment>
+    );
+  });
 }
 
 /** JSONL: metadata record keys in cyan, file record keys in purple. */
@@ -55,8 +118,8 @@ function renderJsonl(lines: string[]): React.ReactNode[] {
       continue;
     }
     const keyCls = line.includes('"recordType":"metadata"')
-      ? "text-cyan-400"
-      : "text-purple-400";
+      ? "text-info"
+      : "text-accent";
     const parts = line.split(JSONL_KEY_SPLIT_RE);
     nodes.push(
       <React.Fragment key={i}>
@@ -91,7 +154,7 @@ function renderCompact(lines: string[]): React.ReactNode[] {
         {match ? (
           <>
             {span("text-slate-600", "# ---- ")}
-            {span("text-cyan-300", match[1])}
+            {span("text-info", match[1])}
             {span("text-slate-600", " ----")}
           </>
         ) : (
@@ -152,8 +215,8 @@ function renderStructured(lines: string[]): React.ReactNode[] {
     if (endMatch && !inCode && !inFence && !inXml) {
       push(
         <>
-          {span("text-emerald-400 font-semibold", "END OF FILE: ")}
-          {span("text-emerald-300", endMatch[1])}
+          {span("text-ok font-semibold", "END OF FILE: ")}
+          {span("text-ok", endMatch[1])}
         </>,
         i,
       );
@@ -168,11 +231,11 @@ function renderStructured(lines: string[]): React.ReactNode[] {
 
     // Root <codebase> wrapper tags
     if (CODEBASE_OPEN_RE.test(line)) {
-      push(span("text-purple-400", line), i);
+      push(span("text-accent", line), i);
       continue;
     }
     if (CODEBASE_CLOSE_RE.test(line)) {
-      push(span("text-emerald-400", line), i);
+      push(span("text-ok", line), i);
       continue;
     }
 
@@ -183,13 +246,13 @@ function renderStructured(lines: string[]): React.ReactNode[] {
       const [, label, value] = metaMatch;
       const valueCls =
         label === "FILE LOCATION"
-          ? "text-cyan-300"
+          ? "text-info"
           : label === "FILE TYPE"
-            ? "text-violet-300"
+            ? "text-accent"
             : "text-slate-200";
       push(
         <>
-          {span("text-purple-400 font-semibold", `${label}: `)}
+          {span("text-accent font-semibold", `${label}: `)}
           {span(valueCls, value)}
         </>,
         i,
@@ -203,7 +266,7 @@ function renderStructured(lines: string[]): React.ReactNode[] {
       const [, label, value] = docMatch;
       push(
         <>
-          {span("text-cyan-400 font-semibold", `${label}: `)}
+          {span("text-info font-semibold", `${label}: `)}
           {span("text-slate-200", value)}
         </>,
         i,
@@ -229,7 +292,7 @@ function renderStructured(lines: string[]): React.ReactNode[] {
         push(
           <>
             {span("text-slate-500", num)}
-            {span("text-cyan-400 font-semibold", `[${tag}]`)}{" "}
+            {span("text-info font-semibold", `[${tag}]`)}{" "}
             {span("text-slate-200", path)}
             {size ? span("text-slate-500", size) : null}
           </>,
@@ -246,8 +309,8 @@ function renderStructured(lines: string[]): React.ReactNode[] {
     if (mdHeading && !inFence) {
       push(
         <>
-          {span("text-cyan-400 font-bold", "### File: ")}
-          {span("text-cyan-200", mdHeading[1])}
+          {span("text-info font-bold", "### File: ")}
+          {span("text-info", mdHeading[1])}
         </>,
         i,
       );
@@ -257,7 +320,7 @@ function renderStructured(lines: string[]): React.ReactNode[] {
     if (mdMeta && !inFence) {
       push(
         <>
-          {span("text-purple-400 font-semibold", `> **${mdMeta[1]}**: `)}
+          {span("text-accent font-semibold", `> **${mdMeta[1]}**: `)}
           {span("text-slate-200", mdMeta[2])}
         </>,
         i,
@@ -268,7 +331,7 @@ function renderStructured(lines: string[]): React.ReactNode[] {
     if (mdHeaderMeta && !inFence && !inXml) {
       push(
         <>
-          {span("text-purple-400 font-semibold", `- **${mdHeaderMeta[1]}**: `)}
+          {span("text-accent font-semibold", `- **${mdHeaderMeta[1]}**: `)}
           {span("text-slate-200", mdHeaderMeta[2])}
         </>,
         i,
@@ -276,11 +339,11 @@ function renderStructured(lines: string[]): React.ReactNode[] {
       continue;
     }
     if (line.startsWith("# ") && !inFence && !inXml) {
-      push(span("text-cyan-400 font-bold", line), i);
+      push(span("text-info font-bold", line), i);
       continue;
     }
     if (MD_END_RE.test(line)) {
-      push(span("text-emerald-400", line), i);
+      push(span("text-ok", line), i);
       continue;
     }
     if (FENCE_RE.test(line)) {
@@ -292,12 +355,12 @@ function renderStructured(lines: string[]): React.ReactNode[] {
     // XML style
     if (XML_OPEN_RE.test(line)) {
       inXml = true;
-      push(span("text-purple-400", line), i);
+      push(span("text-accent", line), i);
       continue;
     }
     if (XML_CLOSE_RE.test(line)) {
       inXml = false;
-      push(span("text-emerald-400", line), i);
+      push(span("text-ok", line), i);
       continue;
     }
 
@@ -333,6 +396,7 @@ export const AnalyzerTextPreview: React.FC<{
     const lines = text.split("\n");
     if (lines.length > MAX_HIGHLIGHT_LINES) return null;
 
+    if (format === "json") return renderJson(lines);
     if (format === "jsonl") return renderJsonl(lines);
     if (format === "compact") return renderCompact(lines);
     return renderStructured(lines);

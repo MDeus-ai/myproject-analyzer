@@ -33,7 +33,7 @@ interface CodeAnalyzerViewProps {
 }
 
 /** Above this combined content size, only the active format is generated
- *  (avoids holding 5 multi-MB strings in memory at once). */
+ *  (avoids holding 6 multi-MB strings in memory at once). */
 const MAX_MULTI_FORMAT_CHARS = 6_000_000;
 
 const FORMAT_META: Record<
@@ -70,6 +70,12 @@ const FORMAT_META: Record<
     ext: "jsonl",
     mime: "application/x-ndjson;charset=utf-8",
   },
+  json: {
+    label: "JSON",
+    hint: "One valid JSON document — scripts, tooling & custom pipelines",
+    ext: "json",
+    mime: "application/json;charset=utf-8",
+  },
 };
 
 const FORMAT_ORDER: AnalyzerStyle[] = [
@@ -78,6 +84,7 @@ const FORMAT_ORDER: AnalyzerStyle[] = [
   "markdown",
   "xml",
   "jsonl",
+  "json",
 ];
 
 /** Token count above which a file row is highlighted as heavy. */
@@ -299,7 +306,7 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
               <h1 className="text-sm font-semibold text-slate-100">
                 CodeFile Analyzer
               </h1>
-              <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 text-[10px] font-mono font-medium border border-cyan-500/25">
+              <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/10 text-info text-[10px] font-mono font-medium border border-cyan-500/25">
                 {selectedFiles.length}/{analyzedFiles.length} files
               </span>
             </div>
@@ -319,7 +326,7 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
               title={formatTooltip(style)}
               className={`px-2.5 py-1 rounded-md font-medium transition-all ${
                 formatStyle === style
-                  ? "surface-raised text-cyan-300 shadow-sm"
+                  ? "surface-raised text-info shadow-sm"
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
@@ -384,8 +391,8 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
           >
             {copied ? (
               <>
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-300">Copied!</span>
+                <Check className="w-3.5 h-3.5 text-ok" />
+                <span className="text-ok">Copied!</span>
               </>
             ) : (
               <>
@@ -411,7 +418,7 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
 
       {/* Secrets warning banner — only when secret files are in the selection */}
       {selectedSecretFiles.length > 0 && (
-        <div className="bg-rose-500/10 border-b border-rose-500/30 px-4 py-2 flex items-center space-x-2 text-xs text-rose-300">
+        <div className="bg-rose-500/10 border-b border-rose-500/30 px-4 py-2 flex items-center space-x-2 text-xs text-danger">
           <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
           <span className="leading-relaxed">
             <strong>Heads up:</strong> {getSecretWarning(selectedSecretFiles)}
@@ -482,7 +489,7 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
                 <button
                   type="button"
                   onClick={selectOnlyCodeFiles}
-                  className="text-cyan-400 hover:text-cyan-300 text-[11px]"
+                  className="text-info hover:opacity-80 text-[11px]"
                 >
                   Select All Code
                 </button>
@@ -528,8 +535,8 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
                       <span
                         className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase font-bold border border-subtle ${
                           isSecret
-                            ? "bg-rose-500/15 text-rose-300"
-                            : "surface-raised text-cyan-300"
+                            ? "bg-rose-500/15 text-danger"
+                            : "surface-raised text-info"
                         }`}
                       >
                         {file.meta.fileType}
@@ -550,7 +557,7 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
                           <span
                             className={
                               file.tokens > HEAVY_FILE_TOKENS
-                                ? "text-amber-400 font-semibold"
+                                ? "text-warn font-semibold"
                                 : ""
                             }
                             title="Estimated tokens for this file"
@@ -562,12 +569,12 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
                       <span>•</span>
                       <span className="capitalize">{file.meta.language}</span>
                       {file.isLock && (
-                        <span className="text-amber-400 font-semibold">
+                        <span className="text-warn font-semibold">
                           • lockfile — off by default
                         </span>
                       )}
                       {isSecret && (
-                        <span className="text-rose-400 font-semibold">
+                        <span className="text-danger font-semibold">
                           • secrets?
                         </span>
                       )}
@@ -608,14 +615,14 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
                 <span className="font-mono text-[11px]">
                   {selectedFiles.length} files • {totalLines} lines •{" "}
                   {formatBytes(combinedText.length)} •{" "}
-                  <span className="text-cyan-300">
+                  <span className="text-info">
                     ~{estimatedTokensCount.toLocaleString()} tokens
                   </span>
                 </span>
                 {formatStyle === "compact" && compactSavings > 0 && (
                   <>
                     <span className="hidden sm:inline text-slate-600">|</span>
-                    <span className="font-mono text-[11px] text-emerald-300">
+                    <span className="font-mono text-[11px] text-ok">
                       -{compactSavings}% tokens vs Standard
                     </span>
                   </>

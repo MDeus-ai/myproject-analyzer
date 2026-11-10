@@ -13,12 +13,17 @@ import {
   Braces,
   BookOpen,
   FileCode2,
+  FileJson,
+  Github,
 } from "lucide-react";
 import { FolderScanResult } from "../types";
 import { FolderDropzone } from "./FolderDropzone";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { ScanProgress } from "../utils/folderReader";
 import { SampleScenarioId } from "../utils/sampleProject";
+
+/** Public repository — shown in the page footer. */
+const GITHUB_REPO_URL = "https://github.com/your-username/myproject-analyzer";
 
 interface HomePageProps {
   onScanResult: (result: FolderScanResult) => void;
@@ -34,7 +39,13 @@ interface HomePageProps {
 /* CodeFile Analyzer spotlight: interactive format preview samples     */
 /* ------------------------------------------------------------------ */
 
-type AnalyzerPreviewId = "standard" | "compact" | "markdown" | "xml" | "jsonl";
+type AnalyzerPreviewId =
+  | "standard"
+  | "compact"
+  | "markdown"
+  | "xml"
+  | "jsonl"
+  | "json";
 
 interface AnalyzerPreview {
   id: AnalyzerPreviewId;
@@ -73,7 +84,7 @@ const ANALYZER_FORMAT_PREVIEWS: AnalyzerPreview[] = [
           <br />
           &#125;
         </div>
-        <div className="text-emerald-400 font-bold">
+        <div className="text-ok font-bold">
           ================================================================================
           <br />
           END OF FILE: src/components/Header.tsx
@@ -92,7 +103,7 @@ const ANALYZER_FORMAT_PREVIEWS: AnalyzerPreview[] = [
       <>
         <div>
           <span className="text-slate-600"># ---- </span>
-          <span className="text-cyan-300">src/components/Header.tsx</span>
+          <span className="text-info">src/components/Header.tsx</span>
           <span className="text-slate-600"> ----</span>
         </div>
         <div className="text-slate-100">
@@ -105,7 +116,7 @@ const ANALYZER_FORMAT_PREVIEWS: AnalyzerPreview[] = [
         </div>
         <div className="pt-2">
           <span className="text-slate-600"># ---- </span>
-          <span className="text-cyan-300">src/config/auth.ts</span>
+          <span className="text-info">src/config/auth.ts</span>
           <span className="text-slate-600"> ----</span>
         </div>
         <div className="text-slate-100">
@@ -126,8 +137,8 @@ const ANALYZER_FORMAT_PREVIEWS: AnalyzerPreview[] = [
     content: (
       <>
         <div>
-          <span className="text-cyan-400 font-bold">### File: </span>
-          <span className="text-cyan-200">Header.tsx</span>
+          <span className="text-info font-bold">### File: </span>
+          <span className="text-info">Header.tsx</span>
         </div>
         <div>
           <span className="text-purple-400 font-semibold">
@@ -149,7 +160,7 @@ const ANALYZER_FORMAT_PREVIEWS: AnalyzerPreview[] = [
           &#125;
         </div>
         <div className="text-slate-600">```</div>
-        <div className="text-emerald-400">
+        <div className="text-ok">
           &lt;!-- END OF FILE: src/components/Header.tsx --&gt;
         </div>
       </>
@@ -175,7 +186,7 @@ const ANALYZER_FORMAT_PREVIEWS: AnalyzerPreview[] = [
           &#125;
         </div>
         <div className="text-slate-600">]]&gt;</div>
-        <div className="text-emerald-400">&lt;/file&gt;</div>
+        <div className="text-ok">&lt;/file&gt;</div>
         <div className="text-slate-500 pt-1 text-[10px]">
           CDATA wrapping means raw &lt;tags&gt; inside TSX/HTML files can never
           corrupt the document. Ideal for Claude-style structured prompts.
@@ -191,23 +202,23 @@ const ANALYZER_FORMAT_PREVIEWS: AnalyzerPreview[] = [
     content: (
       <>
         <div className="text-slate-300 break-all">
-          &#123;<span className="text-cyan-400">"recordType":</span>
+          &#123;<span className="text-info">"recordType":</span>
           <span className="text-slate-200">"metadata"</span>,
-          <span className="text-cyan-400">"rootFolder":</span>
+          <span className="text-info">"rootFolder":</span>
           <span className="text-slate-200">"acme-saas-platform"</span>,
-          <span className="text-cyan-400">"fileCount":</span>
-          <span className="text-slate-200">24</span>&#125;
+          <span className="text-info">"fileCount":</span>
+          <span className="text-warn">24</span>&#125;
         </div>
         <div className="text-slate-300 break-all">
-          &#123;<span className="text-purple-400">"recordType":</span>
+          &#123;<span className="text-accent">"recordType":</span>
           <span className="text-slate-200">"file"</span>,
-          <span className="text-purple-400">"path":</span>
+          <span className="text-accent">"path":</span>
           <span className="text-slate-200">"src/components/Header.tsx"</span>,
-          <span className="text-purple-400">"fileType":</span>
+          <span className="text-accent">"fileType":</span>
           <span className="text-slate-200">"tsx"</span>,
-          <span className="text-purple-400">"lines":</span>
-          <span className="text-slate-200">4</span>,
-          <span className="text-purple-400">"content":</span>
+          <span className="text-accent">"lines":</span>
+          <span className="text-warn">4</span>,
+          <span className="text-accent">"content":</span>
           <span className="text-slate-200">
             "export function Header() &#123; ... &#125;"
           </span>
@@ -217,6 +228,47 @@ const ANALYZER_FORMAT_PREVIEWS: AnalyzerPreview[] = [
           Every line is an independently parseable JSON object — paste any
           single line into a JSON validator and it passes. Built for LangChain,
           LlamaIndex &amp; vector DB ingestion.
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "json",
+    label: "JSON",
+    ext: "json",
+    badge: "Single Document",
+    content: (
+      <>
+        <div className="text-slate-300 break-all">
+          &#123;
+          <br />
+          &nbsp;&nbsp;<span className="text-info">"rootFolder":</span>{" "}
+          <span className="text-slate-200">"acme-saas-platform"</span>,
+          <br />
+          &nbsp;&nbsp;<span className="text-info">"fileCount":</span>{" "}
+          <span className="text-warn">24</span>,
+          <br />
+          &nbsp;&nbsp;<span className="text-info">"files":</span> [
+          <br />
+          &nbsp;&nbsp;&nbsp;&nbsp;&#123;{" "}
+          <span className="text-accent">"path":</span>{" "}
+          <span className="text-slate-200">"src/components/Header.tsx"</span>,{" "}
+          <span className="text-accent">"fileType":</span>{" "}
+          <span className="text-slate-200">"tsx"</span>,{" "}
+          <span className="text-accent">"lines":</span>{" "}
+          <span className="text-warn">4</span>,{" "}
+          <span className="text-accent">"content":</span>{" "}
+          <span className="text-slate-200">"export function Header() ..."</span>{" "}
+          &#125;
+          <br />
+          &nbsp;&nbsp;]
+          <br />
+          &#125;
+        </div>
+        <div className="text-slate-500 pt-1 text-[10px]">
+          One valid, pretty-printed JSON document — passes JSON.parse and any
+          schema validator out of the box. Use it when your pipeline expects a
+          single payload instead of line-delimited records.
         </div>
       </>
     ),
@@ -280,6 +332,16 @@ const ANALYZER_FORMAT_CARDS: AnalyzerFormatCard[] = [
     blurb: "One self-contained JSON record per line, content machine-pristine.",
     bestFor: "RAG & vector DB ingestion",
   },
+  {
+    id: "json",
+    name: "JSON",
+    ext: ".json",
+    icon: FileJson,
+    iconCls: "bg-violet-500/10 border-violet-500/25 text-violet-400",
+    blurb:
+      "One valid, pretty-printed JSON document with per-file metadata and content.",
+    bestFor: "scripts, tooling & APIs",
+  },
 ];
 
 export const HomePage: React.FC<HomePageProps> = ({
@@ -299,12 +361,12 @@ export const HomePage: React.FC<HomePageProps> = ({
   return (
     <div className="min-h-screen bg-[var(--app-bg)] text-slate-100 flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-200">
       {/* Top Navbar
-          Deliberately sparse: brand + actions only, nav links appear at xl
-          where there is guaranteed room. Theme/palette controls live in one
-          consolidated ThemeSwitcher (same control as the workspace header). */}
+          Row 1: brand + section nav (xl+) + actions. Row 2 (below xl): a
+          scrollable chip strip so the section links stay reachable on
+          mobile/tablet instead of disappearing entirely. */}
       <header className="sticky top-0 z-40 glass-header border-b border-chrome">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
-          {/* Left cluster: brand + nav (nav only when space allows) */}
+          {/* Left cluster: brand + nav (inline nav only when space allows) */}
           <div className="flex items-center gap-8 min-w-0">
             {/* Brand */}
             <div className="flex items-center space-x-3 shrink-0">
@@ -315,7 +377,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <span className="font-bold text-base sm:text-lg tracking-tight text-slate-100 whitespace-nowrap">
                   MyProject Analyzer
                 </span>
-                <span className="hidden sm:inline-block text-[11px] px-2 py-0.5 rounded-full surface-raised text-purple-400 border border-chrome font-mono font-medium">
+                <span className="hidden sm:inline-block text-[11px] px-2 py-0.5 rounded-full surface-raised text-accent border border-chrome font-mono font-medium">
                   v1.0
                 </span>
               </div>
@@ -328,6 +390,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                 className="whitespace-nowrap hover:text-purple-300 transition-colors"
               >
                 Features
+              </a>
+              <a
+                href="#deplenz"
+                className="whitespace-nowrap hover:text-purple-300 transition-colors font-medium text-purple-400"
+              >
+                DepLenz
               </a>
               <a
                 href="#codefile-analyzer"
@@ -350,8 +418,19 @@ export const HomePage: React.FC<HomePageProps> = ({
             </nav>
           </div>
 
-          {/* Right cluster: theme control + actions */}
-          <div className="flex items-center space-x-3 shrink-0">
+          {/* Right cluster: GitHub + theme + actions */}
+          <div className="flex items-center space-x-2.5 sm:space-x-3 shrink-0">
+            <a
+              href={GITHUB_REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View source on GitHub"
+              title="View source on GitHub"
+              className="p-2 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-300 hover:text-slate-100 border border-chrome transition-all"
+            >
+              <Github className="w-4 h-4" />
+            </a>
+
             <ThemeSwitcher />
 
             <button
@@ -375,6 +454,38 @@ export const HomePage: React.FC<HomePageProps> = ({
               <span className="sm:hidden">Open</span>
             </button>
           </div>
+        </div>
+
+        {/* Mobile / tablet section nav — scrollable chips, hidden at xl+ */}
+        <div className="xl:hidden border-t border-subtle">
+          <nav
+            className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-1.5 overflow-x-auto py-2"
+            aria-label="Sections"
+          >
+            {[
+              { href: "#features", label: "Features", hot: false },
+              { href: "#deplenz", label: "DepLenz", hot: true },
+              {
+                href: "#codefile-analyzer",
+                label: "CodeFile Analyzer",
+                hot: false,
+              },
+              { href: "#auto-shield", label: "Auto-Shield", hot: false },
+              { href: "#how-it-works", label: "How It Works", hot: false },
+            ].map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap font-medium transition-colors border ${
+                  link.hot
+                    ? "bg-purple-600/15 text-purple-300 border-purple-500/30"
+                    : "surface-raised text-slate-400 hover:text-slate-200 border-subtle"
+                }`}
+              >
+                {link.label}
+              </a>
+            ))}
+          </nav>
         </div>
       </header>
 
@@ -403,7 +514,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             Strip away nested subdirectories into pure flat files, generate
             publication-grade hierarchy PDFs &amp; high-res images without
             encoding glitches, and bundle codefiles with precise path and type
-            metadata.
+            metadata — in six LLM-ready formats.
           </p>
 
           {/* Embedded Dropzone inside Hero */}
@@ -428,16 +539,16 @@ export const HomePage: React.FC<HomePageProps> = ({
               </span>
             </div>
             <div className="p-4 rounded-2xl surface-card border border-chrome">
-              <span className="block text-2xl font-bold text-amber-400 font-mono">
+              <span className="block text-2xl font-bold text-warn font-mono">
                 Auto-Shield
               </span>
               <span className="text-xs text-slate-400 mt-1 block">
-                Bypasses <code className="text-amber-400">node_modules</code>{" "}
-                &amp; warns
+                Bypasses <code className="text-warn">node_modules</code> &amp;
+                warns
               </span>
             </div>
             <div className="p-4 rounded-2xl surface-card border border-chrome">
-              <span className="block text-2xl font-bold text-emerald-400 font-mono">
+              <span className="block text-2xl font-bold text-ok font-mono">
                 100% Crisp
               </span>
               <span className="text-xs text-slate-400 mt-1 block">
@@ -445,7 +556,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               </span>
             </div>
             <div className="p-4 rounded-2xl surface-card border border-chrome">
-              <span className="block text-2xl font-bold text-cyan-400 font-mono">
+              <span className="block text-2xl font-bold text-info font-mono">
                 35+ Formats
               </span>
               <span className="text-xs text-slate-400 mt-1 block">
@@ -463,7 +574,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-2">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-accent mb-2">
               All-In-One Toolkit
             </h2>
             <p className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight">
@@ -482,10 +593,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                   Flat File Stripper
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  Recursively extracts all files from nested inner directories
-                  into a clean, flat root namespace. Automatically resolves
-                  duplicate filename collisions with three strategies:
-                  Auto-number, Prefix-path, or Overwrite.
+                  Recursively pulls every file out of nested subdirectories into
+                  one clean, flat namespace. Duplicate names are resolved
+                  automatically with your choice of Auto-number, Prefix-path or
+                  Overwrite — then download everything as a single flat ZIP.
                 </p>
               </div>
               <div className="pt-3 border-t border-subtle flex items-center space-x-2 text-[11px] font-mono text-slate-400">
@@ -506,9 +617,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                   Interactive Hierarchy Tree
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  Explore folder depth, item tallies, and cumulative byte sizing
-                  across all branches. Collapsible folders with search highlight
-                  filtering and quick copy of ascii tree text.
+                  Explore your project exactly as it exists on disk: collapsible
+                  branches, per-folder file counts and cumulative byte sizes,
+                  search highlighting, and one-click copy of the tree as plain
+                  text.
                 </p>
               </div>
               <div className="pt-3 border-t border-subtle flex items-center space-x-2 text-[11px] font-mono text-slate-400">
@@ -528,12 +640,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                   Structure PDF &amp; High-Res Image
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  Generates vector PDFs using WinAnsi-safe ASCII tree connectors
-                  (<code className="text-emerald-400 font-mono">|-- </code>)
-                  that never show gibberish or{" "}
-                  <code className="text-emerald-400 font-mono">% % %</code>{" "}
-                  characters. Also provides one-click 2x high-DPI PNG/JPEG image
-                  export!
+                  Design publication-grade structure reports: KPI summary cards,
+                  a vector ASCII tree with selectable fonts and row density (no{" "}
+                  <code className="text-ok font-mono">% % %</code> font
+                  corruption), and a complete inventory table. Export as a
+                  multi-page PDF or a 2x high-DPI PNG/JPEG.
                 </p>
               </div>
               <div className="pt-3 border-t border-subtle flex items-center space-x-2 text-[11px] font-mono text-slate-400">
@@ -554,18 +665,17 @@ export const HomePage: React.FC<HomePageProps> = ({
                   CodeFile Analyzer
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  Identifies relative file location from the project root and
-                  detects language type. Wraps code into a strict 3-part
-                  structured format (Metadata, Code, End Marker) and bundles
-                  multiple files with Table of Contents, live token estimates
-                  and five LLM-friendly export formats.
+                  Pinpoints each file's location from the project root, detects
+                  35+ languages, and bundles selections with a Table of
+                  Contents, live per-format token estimates, lockfile auto-skip
+                  and secrets warnings — exported in six LLM-ready formats.
                 </p>
               </div>
               <div className="pt-3 border-t border-subtle flex items-center space-x-2 text-[11px] font-mono text-slate-400">
                 <span className="px-2 py-0.5 rounded surface-raised border border-subtle">
                   3-Part Metadata Format
                 </span>
-                <span>• 5 Export Formats</span>
+                <span>• 6 Export Formats</span>
               </div>
             </div>
 
@@ -579,12 +689,13 @@ export const HomePage: React.FC<HomePageProps> = ({
                   Auto-Shield Exclusion
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  Automatically detects heavy folders (
-                  <code className="text-amber-400">node_modules</code>,{" "}
-                  <code className="text-amber-400">.git</code>,{" "}
-                  <code className="text-amber-400">dist</code>) and intercepts
-                  them with an interactive pre-import warning modal. Protects
-                  against browser freezes.
+                  Heavy directories (
+                  <code className="text-warn">node_modules</code>,{" "}
+                  <code className="text-warn">.git</code>,{" "}
+                  <code className="text-warn">dist</code>) and your own{" "}
+                  <code className="text-warn">.gitignore</code> rules are
+                  intercepted before import. Review every excluded group — file
+                  by file — and re-include anything with one click.
                 </p>
               </div>
               <div className="pt-3 border-t border-subtle flex items-center space-x-2 text-[11px] font-mono text-slate-400">
@@ -604,9 +715,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                   Analytics &amp; Collision Audit
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  Audit extension distributions, find heaviest assets, and
-                  review every duplicate filename across nested directories with
-                  full original path tracking.
+                  Audit extension distribution with visual meters, surface the
+                  heaviest assets, and review every filename collision with its
+                  original nested path — so flattened exports never lose data.
                 </p>
               </div>
               <div className="pt-3 border-t border-subtle flex items-center space-x-2 text-[11px] font-mono text-slate-400">
@@ -625,7 +736,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
             {/* Left text */}
             <div>
-              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-mono font-medium mb-4">
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-info text-xs font-mono font-medium mb-4">
                 <Code2 className="w-3.5 h-3.5" />
                 <span>Feature Spotlight: CodeFile Analyzer</span>
               </div>
@@ -639,14 +750,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                 types, and wraps each file in a strict 3-part layout — then
                 exports the bundle in any of{" "}
                 <strong className="text-slate-200">
-                  five LLM-friendly formats
-                </strong>{" "}
+                  six LLM-friendly formats
+                </strong>
+                , from token-slim Compact to machine-readable JSONL and JSON,
                 with live token estimates for each.
               </p>
 
               <div className="space-y-3 mb-8">
                 <div className="flex items-start space-x-3 p-3 rounded-xl surface-card border border-chrome">
-                  <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-info flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                     1
                   </div>
                   <div>
@@ -661,7 +773,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
 
                 <div className="flex items-start space-x-3 p-3 rounded-xl surface-card border border-chrome">
-                  <div className="w-6 h-6 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  <div className="w-6 h-6 rounded-lg bg-purple-500/20 text-accent flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                     2
                   </div>
                   <div>
@@ -676,7 +788,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
 
                 <div className="flex items-start space-x-3 p-3 rounded-xl surface-card border border-chrome">
-                  <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-ok flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                     3
                   </div>
                   <div>
@@ -685,7 +797,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     </h4>
                     <p className="text-[11px] text-slate-400 mt-0.5">
                       Clear delimiter indicating file boundary:{" "}
-                      <code className="text-emerald-400 font-mono">
+                      <code className="text-ok font-mono">
                         END OF FILE: &lt;path&gt;
                       </code>
                       .
@@ -707,10 +819,10 @@ export const HomePage: React.FC<HomePageProps> = ({
             {/* Right: interactive tabbed format preview */}
             <div className="rounded-2xl surface-card border border-chrome shadow-xl overflow-hidden font-mono text-xs">
               <div className="px-4 py-2.5 surface-raised border-b border-chrome flex items-center justify-between gap-2 text-slate-400">
-                <span className="text-[11px] text-purple-400 truncate">
+                <span className="text-[11px] text-accent truncate">
                   combined_analysis.{activePreview.ext}
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30 whitespace-nowrap">
+                <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/15 text-accent border border-purple-500/30 whitespace-nowrap">
                   {activePreview.badge}
                 </span>
               </div>
@@ -725,7 +837,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     aria-pressed={analyzerPreviewId === preview.id}
                     className={`px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-all cursor-pointer ${
                       analyzerPreviewId === preview.id
-                        ? "surface-raised text-cyan-300 shadow-sm"
+                        ? "surface-raised text-info shadow-sm"
                         : "text-slate-500 hover:text-slate-300"
                     }`}
                   >
@@ -734,18 +846,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                 ))}
               </div>
 
-              <div className="p-4 sm:p-5 text-slate-300 space-y-2 leading-relaxed overflow-x-auto text-[11px] min-h-[260px]">
+              <div className="p-4 sm:p-5 text-slate-300 space-y-2 leading-relaxed overflow-x-auto text-[11px] min-h-[300px]">
                 {activePreview.content}
               </div>
             </div>
           </div>
 
-          {/* Five export formats explainer row */}
+          {/* Six export formats explainer row */}
           <div className="mt-10 pt-8 border-t border-subtle">
             <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
               <div>
                 <h3 className="text-base sm:text-lg font-bold text-slate-100">
-                  Five Export Formats, One Bundle
+                  Six Export Formats, One Bundle
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
                   Switch formats instantly — live token estimates per format
@@ -753,11 +865,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </p>
               </div>
               <span className="text-[10px] font-mono px-2 py-1 rounded-lg surface-raised border border-subtle text-slate-400">
-                .txt • .md • .xml • .jsonl
+                .txt • .md • .xml • .jsonl • .json
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {ANALYZER_FORMAT_CARDS.map((card) => {
                 const Icon = card.icon;
                 return (
@@ -802,12 +914,12 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div className="p-8 rounded-3xl surface-card border border-amber-500/30 relative overflow-hidden">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div className="space-y-3 max-w-xl">
-                <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-medium">
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-warn-soft border border-warn text-warn text-xs font-mono font-medium">
+                  <ShieldAlert className="w-3.5 h-3.5 text-warn" />
                   <span>Performance Guard</span>
                 </div>
                 <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-50 tracking-tight">
-                  Never Let <code className="text-amber-400">node_modules</code>{" "}
+                  Never Let <code className="text-warn">node_modules</code>{" "}
                   Crash Your Browser
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
@@ -837,7 +949,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       {/* How It Works 3 Steps */}
       <section id="how-it-works" className="py-16 border-t border-chrome">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 text-center">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-2">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-accent mb-2">
             Seamless Workflow
           </h2>
           <p className="text-3xl font-extrabold text-slate-50 tracking-tight mb-12">
@@ -846,7 +958,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
             <div className="p-6 rounded-2xl surface-card border border-chrome">
-              <span className="text-3xl font-extrabold text-purple-400 font-mono mb-3 block">
+              <span className="text-3xl font-extrabold text-accent font-mono mb-3 block">
                 01
               </span>
               <h4 className="text-base font-bold text-slate-100 mb-2">
@@ -859,7 +971,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
 
             <div className="p-6 rounded-2xl surface-card border border-chrome">
-              <span className="text-3xl font-extrabold text-cyan-400 font-mono mb-3 block">
+              <span className="text-3xl font-extrabold text-info font-mono mb-3 block">
                 02
               </span>
               <h4 className="text-base font-bold text-slate-100 mb-2">
@@ -872,7 +984,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
 
             <div className="p-6 rounded-2xl surface-card border border-chrome">
-              <span className="text-3xl font-extrabold text-emerald-400 font-mono mb-3 block">
+              <span className="text-3xl font-extrabold text-ok font-mono mb-3 block">
                 03
               </span>
               <h4 className="text-base font-bold text-slate-100 mb-2">
@@ -900,6 +1012,16 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
 
           <div className="flex items-center space-x-6 text-slate-400">
+            <a
+              href={GITHUB_REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-1.5 hover:text-purple-300 transition-colors"
+              title="View the source code on GitHub"
+            >
+              <Github className="w-3.5 h-3.5" />
+              <span>GitHub</span>
+            </a>
             <button
               type="button"
               onClick={onLoadSample}

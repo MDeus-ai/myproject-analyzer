@@ -420,7 +420,7 @@ export const ExclusionWarningModal: React.FC<ExclusionWarningModalProps> = ({
                                 {group.files.length !== 1 ? "s" : ""}
                               </span>
                               {group.hasSecrets && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/30 font-semibold">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-danger border border-rose-500/30 font-semibold">
                                   may contain secrets
                                 </span>
                               )}
@@ -497,7 +497,7 @@ export const ExclusionWarningModal: React.FC<ExclusionWarningModalProps> = ({
                 .
               </span>
             </div>
-            <span className="text-emerald-400 font-medium">Safe to import</span>
+            <span className="text-ok font-medium">Safe to import</span>
           </div>
         </div>
 

@@ -169,6 +169,94 @@
   border-color: var(--warn-border);
 }
 
+/* ------------------------------------------------------------------ */
+/* Adaptive success accent                                             */
+/* emerald-300/400 body text washes out on light surfaces, so the      */
+/* shade deepens in light mode (mirrors the --warn pattern).           */
+/* ------------------------------------------------------------------ */
+:root {
+  --ok-text: #34d399; /* emerald-400 */
+  --ok-soft-bg: rgba(16, 185, 129, 0.1);
+  --ok-border: rgba(16, 185, 129, 0.3);
+}
+:root[data-appearance="light"] {
+  --ok-text: #047857; /* emerald-700 */
+  --ok-soft-bg: rgba(5, 150, 105, 0.08);
+  --ok-border: rgba(5, 150, 105, 0.32);
+}
+.text-ok {
+  color: var(--ok-text);
+}
+.bg-ok-soft {
+  background-color: var(--ok-soft-bg);
+}
+.border-ok {
+  border-color: var(--ok-border);
+}
+
+/* ------------------------------------------------------------------ */
+/* Adaptive info accent                                                */
+/* cyan-300/400 text is nearly invisible on light surfaces.            */
+/* ------------------------------------------------------------------ */
+:root {
+  --info-text: #22d3ee; /* cyan-400 */
+}
+:root[data-appearance="light"] {
+  --info-text: #0e7490; /* cyan-700 */
+}
+.text-info {
+  color: var(--info-text);
+}
+
+/* ------------------------------------------------------------------ */
+/* Adaptive danger accent                                              */
+/* rose-300 text on rose-tinted backgrounds disappears in light mode.  */
+/* ------------------------------------------------------------------ */
+:root {
+  --danger-text: #fb7185; /* rose-400 */
+}
+:root[data-appearance="light"] {
+  --danger-text: #be123c; /* rose-700 */
+}
+.text-danger {
+  color: var(--danger-text);
+}
+
+/* ------------------------------------------------------------------ */
+/* Theme-following accent controls                                     */
+/* Built on the palette-remapped purple scale, so selected chips,      */
+/* values and sliders follow whichever palette ThemeSwitcher applies,  */
+/* and stay readable in both appearances.                              */
+/* ------------------------------------------------------------------ */
+.chip-accent {
+  background-color: color-mix(
+    in srgb,
+    var(--color-purple-500) 15%,
+    transparent
+  );
+  border-color: color-mix(in srgb, var(--color-purple-500) 45%, transparent);
+  color: var(--color-purple-300);
+}
+:root[data-appearance="light"] .chip-accent {
+  background-color: color-mix(in srgb, var(--color-purple-600) 9%, #ffffff);
+  border-color: color-mix(in srgb, var(--color-purple-600) 45%, transparent);
+  color: var(--color-purple-700);
+}
+
+.text-accent {
+  color: var(--color-purple-300);
+}
+:root[data-appearance="light"] .text-accent {
+  color: var(--color-purple-700);
+}
+
+input[type="range"].slider-accent {
+  accent-color: var(--color-purple-500);
+}
+:root[data-appearance="light"] input[type="range"].slider-accent {
+  accent-color: var(--color-purple-600);
+}
+
 /* Custom sleek scrollbar for desktop app feel */
 ::-webkit-scrollbar {
   width: 6px;

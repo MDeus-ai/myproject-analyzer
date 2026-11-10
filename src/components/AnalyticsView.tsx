@@ -62,7 +62,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <span className="text-xs text-slate-400 block mb-1">
               Total Folder Size
             </span>
-            <span className="text-2xl font-bold text-emerald-400 font-mono">
+            <span className="text-2xl font-bold text-ok font-mono">
               {formatBytes(stats.totalSize)}
             </span>
           </div>
@@ -79,13 +79,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
         {/* Collision Audit Alert */}
         {collisionCount > 0 ? (
-          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-start space-x-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="p-4 rounded-2xl bg-warn-soft border border-warn flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 text-warn shrink-0 mt-0.5" />
             <div>
-              <h4 className="text-xs font-semibold text-amber-300">
+              <h4 className="text-xs font-semibold text-warn">
                 {collisionCount} Name Collisions Handled
               </h4>
-              <p className="text-xs text-amber-200/80 mt-1 leading-relaxed">
+              <p className="text-xs text-warn opacity-80 mt-1 leading-relaxed">
                 When flattening all files to the root, multiple files shared
                 identical names across different subdirectories. They are
                 smoothly auto-disambiguated using your selected strategy so no
@@ -94,8 +94,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             </div>
           </div>
         ) : (
-          <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-300 flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          <div className="p-3.5 rounded-2xl bg-ok-soft border border-ok text-xs text-ok flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span>
               Clean Flat Namespace: Zero file name collisions detected across
               all subfolders.
