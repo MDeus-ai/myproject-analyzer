@@ -2,20 +2,44 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <title>MyProject Analyzer</title>
-    <meta name="description" content="MyProject Analyzer - Desktop tool to strip inner subfolders into flat files, visualize project hierarchy trees, export structure PDFs and high-res images, and analyze codefiles with location and type metadata." />
+    <meta
+      name="description"
+      content="MyProject Analyzer - Desktop tool to strip inner subfolders into flat files, visualize project hierarchy trees, export structure PDFs and high-res images, and analyze codefiles with location and type metadata."
+    />
     <meta property="og:title" content="MyProject Analyzer" />
-    <meta property="og:description" content="MyProject Analyzer - Desktop tool to strip inner subfolders into flat files, visualize project hierarchy trees, export structure PDFs and high-res images, and analyze codefiles with location and type metadata." />
+    <meta
+      property="og:description"
+      content="MyProject Analyzer - Desktop tool to strip inner subfolders into flat files, visualize project hierarchy trees, export structure PDFs and high-res images, and analyze codefiles with location and type metadata."
+    />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+
+    <!-- Mobile browser chrome color (matches --app-bg for each appearance) -->
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#0e1013"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#eef1f6"
+    />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans+Condensed:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
