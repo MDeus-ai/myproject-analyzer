@@ -1,3 +1,4 @@
+
 import React from "react";
 import {
   X,
@@ -7,6 +8,7 @@ import {
   FileText,
   ShieldCheck,
   Code2,
+  Network,
 } from "lucide-react";
 
 interface HelpShortcutsModalProps {
@@ -25,8 +27,8 @@ export const HelpShortcutsModal: React.FC<HelpShortcutsModalProps> = ({
     { key: "Cmd/Ctrl + S", action: "Download flattened files ZIP archive" },
     { key: "Cmd/Ctrl + P", action: "Download structure PDF document" },
     {
-      key: "1 / 2 / 3 / 4 / 5",
-      action: "Switch tabs (Files / Tree / PDF / Stats / Analyzer)",
+      key: "1 / 2 / 3 / 4 / 5 / 6",
+      action: "Switch tabs (Files / Tree / PDF / Stats / Analyzer / DepLenz)",
     },
     { key: "Esc", action: "Close any open drawer or modal" },
   ];
@@ -109,6 +111,17 @@ export const HelpShortcutsModal: React.FC<HelpShortcutsModalProps> = ({
                   markers.
                 </p>
               </div>
+
+              <div className="p-3 rounded-xl surface-inset border border-subtle space-y-1">
+                <div className="flex items-center space-x-1.5 text-purple-400 font-semibold">
+                  <Network className="w-3.5 h-3.5" />
+                  <span>DepLenz</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Function dependency trees, keyword search with enclosing symbols,
+                  and surgical context prompt extraction with syntax diagnostics.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -147,3 +160,4 @@ export const HelpShortcutsModal: React.FC<HelpShortcutsModalProps> = ({
     </div>
   );
 };
+

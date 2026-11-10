@@ -21,6 +21,14 @@ export interface ProcessedFile {
 
 export type CollisionStrategy = "enumerate" | "prefix-path" | "overwrite";
 
+export type WorkspaceTab =
+  | "files"
+  | "tree"
+  | "pdf"
+  | "analytics"
+  | "analyzer"
+  | "deplenz";
+
 export interface FolderNode {
   name: string;
   relativePath: string;

@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: MIT
@@ -18,6 +19,7 @@ import { DirectoryTreeView } from "./components/DirectoryTreeView";
 import { PdfArchitectView } from "./components/PdfArchitectView";
 import { AnalyticsView } from "./components/AnalyticsView";
 import { CodeAnalyzerView } from "./components/CodeAnalyzerView";
+import { DepLenzView } from "./components/DepLenzView";
 import { FilePreviewModal } from "./components/FilePreviewModal";
 import { HelpShortcutsModal } from "./components/HelpShortcutsModal";
 import { ExclusionWarningModal } from "./components/ExclusionWarningModal";
@@ -28,6 +30,7 @@ import {
   ProcessedFile,
   FolderScanResult,
   ExcludedFolderInfo,
+  WorkspaceTab,
 } from "./types";
 import { buildFolderTree } from "./utils/treeBuilder";
 import { resolveCollisions } from "./utils/collisionResolver";
@@ -54,9 +57,7 @@ export default function App() {
   const [rootFolderName, setRootFolderName] = useState<string>("");
   const [collisionStrategy, setCollisionStrategy] =
     useState<CollisionStrategy>("enumerate");
-  const [activeTab, setActiveTab] = useState<
-    "files" | "tree" | "pdf" | "analytics" | "analyzer"
-  >("files");
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("files");
 
   // Preview & Modal states
   const [previewFile, setPreviewFile] = useState<ProcessedFile | null>(null);
@@ -305,6 +306,9 @@ export default function App() {
       } else if (e.key === "5") {
         setCurrentView("workspace");
         setActiveTab("analyzer");
+      } else if (e.key === "6") {
+        setCurrentView("workspace");
+        setActiveTab("deplenz");
       } else if (e.key === "?") {
         setIsHelpOpen((prev) => !prev);
       }
@@ -571,6 +575,13 @@ export default function App() {
                     rootFolderName={rootFolderName}
                   />
                 )}
+
+                {activeTab === "deplenz" && (
+                  <DepLenzView
+                    files={rawFiles}
+                    onSelectFile={setPreviewFile}
+                  />
+                )}
               </div>
             )}
           </main>
@@ -637,3 +648,4 @@ export default function App() {
     </div>
   );
 }
+

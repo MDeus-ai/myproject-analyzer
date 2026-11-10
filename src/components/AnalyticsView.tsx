@@ -1,3 +1,4 @@
+
 import React from "react";
 import { BarChart3, AlertTriangle } from "lucide-react";
 import { FolderAnalysisStats, ProcessedFile } from "../types";
@@ -179,3 +180,4 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     </div>
   );
 };
+

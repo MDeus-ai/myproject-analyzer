@@ -14,7 +14,6 @@ export interface CodeLanguageInfo {
  * - `compact`:  minimal `# ---- path ----` header + code only (token-efficient)
  * - `markdown`: fenced code blocks with blockquote metadata
  * - `xml`:      CDATA-wrapped, attribute-rich tags (ideal for Claude-style prompts)
- * - `json`:     one valid, pretty-printed JSON document (scripts & tooling)
  * - `jsonl`:    one JSON record per line (RAG pipelines, vector DB ingestion)
  */
 export type AnalyzerStyle =
@@ -22,8 +21,8 @@ export type AnalyzerStyle =
   | "compact"
   | "markdown"
   | "xml"
-  | "json"
-  | "jsonl";
+  | "jsonl"
+  | "json";
 
 const EXTENSION_MAP: Record<
   string,
@@ -405,61 +404,6 @@ function buildJsonlFileRecord(file: ProcessedFile, rootFolderName: string) {
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* JSON document format: one valid, pretty-printed JSON payload with   */
-/* top-level metadata and a files[] array. Pairs with JSONL (one       */
-/* record per line) for pipelines that expect a single document.       */
-/* ------------------------------------------------------------------ */
-
-interface JsonFileRecord {
-  path: string;
-  name: string;
-  fileType: string;
-  language: string;
-  category: string;
-  size: number;
-  lines: number;
-  content: string;
-}
-
-function buildJsonFileRecord(
-  file: ProcessedFile,
-  rootFolderName: string,
-): JsonFileRecord {
-  const meta = identifyCodeFileType(file.name);
-  // Same honest-placeholder policy as the JSONL records: binary, empty and
-  // over-limit files export their reason string instead of fake content.
-  const content = file.textContent || getMissingContentReason(file);
-  return {
-    path: getRelativePathFromRoot(file, rootFolderName),
-    name: file.name,
-    fileType: meta.fileType,
-    language: meta.language,
-    category: meta.category,
-    size: file.size,
-    lines: countLines(content),
-    content,
-  };
-}
-
-export function buildJsonBundle(
-  files: ProcessedFile[],
-  rootFolderName: string,
-): string {
-  return (
-    JSON.stringify(
-      {
-        rootFolder: rootFolderName || "Project Root",
-        fileCount: files.length,
-        exportedAt: new Date().toISOString(),
-        files: files.map((f) => buildJsonFileRecord(f, rootFolderName)),
-      },
-      null,
-      2,
-    ) + "\n"
-  );
-}
-
 /**
  * Formats a single file according to the selected style.
  * Standard: 1) metadata on top, 2) actual content, 3) end indicator.
@@ -483,10 +427,10 @@ export function formatSingleCodeFile(
     return JSON.stringify(buildJsonlFileRecord(file, rootFolderName)) + "\n";
   }
 
-  // JSON: one pretty-printed record for the single file.
+  // JSON: single pretty-printed JSON document
   if (style === "json") {
     return (
-      JSON.stringify(buildJsonFileRecord(file, rootFolderName), null, 2) + "\n"
+      JSON.stringify(buildJsonlFileRecord(file, rootFolderName), null, 2) + "\n"
     );
   }
 
@@ -579,9 +523,16 @@ export function combineMultipleCodeFiles(
     return lines.join("\n") + "\n";
   }
 
-  // ---- JSON: one valid document with metadata + files[] ---------------------
+  // ---- JSON: single pretty-printed JSON document ----------------------------
   if (style === "json") {
-    return buildJsonBundle(files, rootFolderName);
+    const doc = {
+      recordType: "document",
+      rootFolder: rootFolderName || "Project Root",
+      fileCount: files.length,
+      exportedAt,
+      files: files.map((f) => buildJsonlFileRecord(f, rootFolderName)),
+    };
+    return JSON.stringify(doc, null, 2) + "\n";
   }
 
   // ---- Compact: files only, zero document chrome ----------------------------

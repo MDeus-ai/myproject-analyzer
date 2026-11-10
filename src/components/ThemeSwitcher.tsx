@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { Palette, Check, Sun, Moon } from "lucide-react";
 import {
@@ -158,3 +159,4 @@ export const ThemeSwitcher: React.FC = () => {
     </div>
   );
 };
+

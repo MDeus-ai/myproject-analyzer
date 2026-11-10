@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -181,3 +182,4 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
     </div>
   );
 };
+

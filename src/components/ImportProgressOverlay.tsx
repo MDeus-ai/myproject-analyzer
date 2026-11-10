@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Loader2, FolderInput } from "lucide-react";
 import { ScanProgress } from "../utils/folderReader";
@@ -102,3 +103,4 @@ export const ImportProgressOverlay: React.FC<ImportProgressOverlayProps> = ({
     </div>
   );
 };
+

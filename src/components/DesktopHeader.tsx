@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import {
   FolderOpen,
@@ -13,15 +14,14 @@ import {
   Code2,
   ShieldAlert,
   ChevronDown,
+  Network,
 } from "lucide-react";
-import { FolderAnalysisStats, ExcludedFolderInfo } from "../types";
+import { FolderAnalysisStats, ExcludedFolderInfo, WorkspaceTab } from "../types";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
 interface DesktopHeaderProps {
-  activeTab: "files" | "tree" | "pdf" | "analytics" | "analyzer";
-  setActiveTab: (
-    tab: "files" | "tree" | "pdf" | "analytics" | "analyzer",
-  ) => void;
+  activeTab: WorkspaceTab;
+  setActiveTab: (tab: WorkspaceTab) => void;
   stats: FolderAnalysisStats | null;
   onOpenFolderClick: () => void;
   onLoadSampleClick: () => void;
@@ -163,6 +163,7 @@ const TABS = [
   { id: "pdf", label: "PDF & Image", icon: FileText },
   { id: "analytics", label: "Stats", icon: BarChart3 },
   { id: "analyzer", label: "Analyzer", icon: Code2 },
+  { id: "deplenz", label: "DepLenz", icon: Network },
 ] as const;
 
 export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
@@ -321,3 +322,4 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
     </header>
   );
 };
+

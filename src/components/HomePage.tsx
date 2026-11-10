@@ -15,6 +15,12 @@ import {
   FileCode2,
   FileJson,
   Github,
+  Network,
+  ClipboardPaste,
+  Copy,
+  FilePenLine,
+  FilePlus2,
+  FileX2,
 } from "lucide-react";
 import { FolderScanResult } from "../types";
 import { FolderDropzone } from "./FolderDropzone";
@@ -23,7 +29,7 @@ import { ScanProgress } from "../utils/folderReader";
 import { SampleScenarioId } from "../utils/sampleProject";
 
 /** Public repository — shown in the page footer. */
-const GITHUB_REPO_URL = "https://github.com/your-username/myproject-analyzer";
+const GITHUB_REPO_URL = "https://github.com/MDeus-ai/myproject-analyzer";
 
 interface HomePageProps {
   onScanResult: (result: FolderScanResult) => void;
@@ -361,76 +367,74 @@ export const HomePage: React.FC<HomePageProps> = ({
   return (
     <div className="min-h-screen bg-[var(--app-bg)] text-slate-100 flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-200">
       {/* Top Navbar
-          Row 1: brand + section nav (xl+) + actions. Row 2 (below xl): a
-          scrollable chip strip so the section links stay reachable on
-          mobile/tablet instead of disappearing entirely. */}
+          Row 1: brand + inline nav (xl+) + actions. The nav is flex-1 +
+          min-w-0 + overflow-x-auto: it occupies only the space actually
+          left between the brand and the action cluster, and SCROLLS
+          internally if the links exceed it — overlap is impossible by
+          construction, at any viewport width.
+          Row 2 (below xl): scrollable chip strip with the same links. */}
       <header className="sticky top-0 z-40 glass-header border-b border-chrome">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
-          {/* Left cluster: brand + nav (inline nav only when space allows) */}
-          <div className="flex items-center gap-8 min-w-0">
-            {/* Brand */}
-            <div className="flex items-center space-x-3 shrink-0">
-              <div className="w-9 h-9 rounded-xl bg-purple-600 flex items-center justify-center text-white shadow-sm">
-                <FolderTree className="w-5 h-5" />
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="font-bold text-base sm:text-lg tracking-tight text-slate-100 whitespace-nowrap">
-                  MyProject Analyzer
-                </span>
-                <span className="hidden sm:inline-block text-[11px] px-2 py-0.5 rounded-full surface-raised text-accent border border-chrome font-mono font-medium">
-                  v1.0
-                </span>
-              </div>
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-4">
+          {/* Brand */}
+          <div className="flex items-center space-x-3 shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-purple-600 flex items-center justify-center text-white shadow-sm">
+              <FolderTree className="w-5 h-5" />
             </div>
-
-            {/* Nav Links - single line each, only at xl+ where they fit comfortably */}
-            <nav className="hidden xl:flex items-center space-x-6 text-sm text-slate-300 shrink-0">
-              <a
-                href="#features"
-                className="whitespace-nowrap hover:text-purple-300 transition-colors"
-              >
-                Features
-              </a>
-              <a
-                href="#deplenz"
-                className="whitespace-nowrap hover:text-purple-300 transition-colors font-medium text-purple-400"
-              >
-                DepLenz
-              </a>
-              <a
-                href="#codefile-analyzer"
-                className="whitespace-nowrap hover:text-purple-300 transition-colors"
-              >
-                CodeFile Analyzer
-              </a>
-              <a
-                href="#auto-shield"
-                className="whitespace-nowrap hover:text-purple-300 transition-colors"
-              >
-                Auto-Shield
-              </a>
-              <a
-                href="#how-it-works"
-                className="whitespace-nowrap hover:text-purple-300 transition-colors"
-              >
-                How It Works
-              </a>
-            </nav>
+            <div className="flex items-center space-x-2">
+              <span className="font-bold text-base sm:text-lg tracking-tight text-slate-100 whitespace-nowrap">
+                MyProject Analyzer
+              </span>
+              <span className="hidden sm:inline-block text-[11px] px-2 py-0.5 rounded-full surface-raised text-accent border border-chrome font-mono font-medium">
+                v1.0
+              </span>
+            </div>
           </div>
 
-          {/* Right cluster: GitHub + theme + actions */}
-          <div className="flex items-center space-x-2.5 sm:space-x-3 shrink-0">
+          {/* Inline nav (xl+) — constrained by flexbox itself */}
+          <nav
+            className="hidden xl:flex items-center space-x-6 text-sm text-slate-300 flex-1 min-w-0 overflow-x-auto scrollbar-none whitespace-nowrap"
+            aria-label="Sections"
+          >
             <a
-              href={GITHUB_REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="View source on GitHub"
-              title="View source on GitHub"
-              className="p-2 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-300 hover:text-slate-100 border border-chrome transition-all"
+              href="#features"
+              className="whitespace-nowrap hover:text-purple-300 transition-colors"
             >
-              <Github className="w-4 h-4" />
+              Features
             </a>
+            <a
+              href="#deplenz"
+              className="whitespace-nowrap hover:text-purple-300 transition-colors font-medium text-purple-400"
+            >
+              DepLenz
+            </a>
+            <a
+              href="#smart-paste"
+              className="whitespace-nowrap hover:text-emerald-300 transition-colors font-medium text-emerald-400"
+            >
+              Smart Paste
+            </a>
+            <a
+              href="#codefile-analyzer"
+              className="whitespace-nowrap hover:text-purple-300 transition-colors"
+            >
+              CodeFile Analyzer
+            </a>
+            <a
+              href="#auto-shield"
+              className="whitespace-nowrap hover:text-purple-300 transition-colors"
+            >
+              Auto-Shield
+            </a>
+            <a
+              href="#how-it-works"
+              className="whitespace-nowrap hover:text-purple-300 transition-colors"
+            >
+              How It Works
+            </a>
+          </nav>
 
+          {/* Right cluster: theme + actions (never shrinks) */}
+          <div className="flex items-center space-x-2.5 sm:space-x-3 shrink-0 ml-auto">
             <ThemeSwitcher />
 
             <button
@@ -456,15 +460,16 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
 
-        {/* Mobile / tablet section nav — scrollable chips, hidden at xl+ */}
+        {/* Section nav chip strip — below xl */}
         <div className="xl:hidden border-t border-subtle">
           <nav
-            className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-1.5 overflow-x-auto py-2"
+            className="max-w-[1600px] mx-auto px-4 sm:px-6 flex items-center gap-1.5 overflow-x-auto scrollbar-none py-2"
             aria-label="Sections"
           >
             {[
               { href: "#features", label: "Features", hot: false },
               { href: "#deplenz", label: "DepLenz", hot: true },
+              { href: "#smart-paste", label: "Smart Paste", hot: true },
               {
                 href: "#codefile-analyzer",
                 label: "CodeFile Analyzer",
@@ -478,7 +483,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 href={link.href}
                 className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap font-medium transition-colors border ${
                   link.hot
-                    ? "bg-purple-600/15 text-purple-300 border-purple-500/30"
+                    ? "bg-emerald-600/15 text-emerald-300 border-emerald-500/30"
                     : "surface-raised text-slate-400 hover:text-slate-200 border-subtle"
                 }`}
               >
@@ -723,6 +728,852 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div className="pt-3 border-t border-subtle flex items-center space-x-2 text-[11px] font-mono text-slate-400">
                 <span className="px-2 py-0.5 rounded surface-raised border border-subtle">
                   Visual Distribution Meters
+                </span>
+              </div>
+            </div>
+
+            {/* 7. DepLenz Codebase Lens & Dependency Graph */}
+            <div className="p-6 rounded-2xl surface-card border border-chrome hover:border-purple-500/40 transition-all flex flex-col justify-between group md:col-span-2 lg:col-span-3">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Network className="w-6 h-6" />
+                  </div>
+                  <span className="text-[10px] font-mono px-2.5 py-1 rounded-full surface-raised text-accent border border-chrome">
+                    Web Dev Tech Stacks
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-slate-100 mb-2">
+                  DepLenz: Codebase Lens &amp; Interactive Dependency Map
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                  Understand how every component, hook and function in your
+                  codebase relates at a glance. DepLenz renders a free-form
+                  interactive map of your entire project — drag nodes to
+                  rearrange, pan &amp; zoom, click to trace callers and callees
+                  with animated flow edges — then pivot into bi-directional
+                  dependency trees and surgical LLM prompt bundles so you never
+                  paste a whole repo into an AI again. And with{" "}
+                  <strong className="text-slate-300">Smart Paste</strong>, the
+                  AI's answer comes back as complete, parseable files — copy
+                  them individually or export a ZIP that drops cleanly into your
+                  project.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs text-slate-300">
+                  <div className="p-2.5 rounded-xl surface-raised border border-subtle">
+                    <span className="font-semibold text-purple-300 block mb-1">
+                      Interactive Codebase Map
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Free-form SVG graph — drag nodes anywhere, cursor-anchored
+                      zoom, neighbor tracing with animated directional edges.
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl surface-raised border border-subtle">
+                    <span className="font-semibold text-purple-300 block mb-1">
+                      Dependency Tree &amp; Search
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Upstream callers, downstream callees, blast radius — plus
+                      keyword search with enclosing-function detection.
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl surface-raised border border-subtle">
+                    <span className="font-semibold text-purple-300 block mb-1">
+                      Surgical Context &amp; Syntax Guard
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Extracts minimal LLM prompts (~85% token savings), catches
+                      syntax errors early, and ships answers back via Smart
+                      Paste.
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="pt-3 mt-4 border-t border-subtle flex items-center justify-between text-[11px] font-mono text-slate-400">
+                <span className="px-2 py-0.5 rounded surface-raised border border-subtle">
+                  AST Static Analyzer
+                </span>
+                <span className="text-purple-400">
+                  Free-Form Canvas • Zero Server Uploads
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature Spotlight: DepLenz */}
+      <section
+        id="deplenz"
+        className="py-16 border-t border-chrome surface-section scroll-mt-16"
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+            {/* Left text column */}
+            <div>
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-mono font-medium mb-4">
+                <Network className="w-3.5 h-3.5" />
+                <span>Feature Spotlight: DepLenz</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight mb-4">
+                See How Your Whole Codebase Connects — Then Operate Surgically
+              </h2>
+              <p className="text-sm text-slate-400 leading-relaxed mb-6">
+                DepLenz runs in-browser static analysis on web stacks (
+                <code className="text-purple-400">.ts</code>,{" "}
+                <code className="text-purple-400">.tsx</code>,{" "}
+                <code className="text-purple-400">.js</code>,{" "}
+                <code className="text-purple-400">.jsx</code>,{" "}
+                <code className="text-purple-400">.vue</code>,{" "}
+                <code className="text-purple-400">.svelte</code>) and turns your
+                project into a living map: every function, component, hook and
+                npm package as a node, every call as an edge. Explore freely,
+                then zoom into any symbol for surgical edits — and let Smart
+                Paste turn the model's answer back into complete, parseable
+                files ready to drop into the project.
+              </p>
+
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    1
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Interactive Codebase Map
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      A free-form graph canvas: drag any node to rearrange the
+                      layout, pan and cursor-anchored zoom, kind-colored boxes
+                      (component / function / hook / class / package), and
+                      click-to-trace neighbor highlighting with animated
+                      directional flow edges.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    2
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Codebase Keyword Search
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Locates any keyword or regex pattern and automatically
+                      identifies its enclosing function or component so you know
+                      exactly where logic lives.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    3
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Bi-Directional Dependency Tree
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Maps upstream callers (who breaks if you change this) and
+                      downstream dependencies (what it calls + npm imports) with
+                      blast-radius risk ratings.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    4
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Surgical LLM Prompt Extractor
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Extracts only the target function, direct caller
+                      contracts, and dependencies into a minimal prompt bundle
+                      (~250 tokens), saving 80–95% tokens.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    5
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Syntax Error Detection &amp; Early Warning
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Detects unclosed delimiters, mismatched brackets, and
+                      malformed JSON before analysis, warning you with exact
+                      coordinates so broken syntax never skews the graph.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-teal-500/10 border border-teal-500/30 text-teal-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    6
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Smart Paste — Structured Output &amp; Re-Integration
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Appends a dependency-aware output contract to the surgical
+                      prompt, so the LLM returns complete files in parseable
+                      blocks. Paste the answer into the Smart Paste Inbox to
+                      copy each changed file or export them all as a ZIP — with
+                      optional{" "}
+                      <code className="text-teal-400">[SMART-PASTE]</code>{" "}
+                      marker comments.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right visual mockup column */}
+            <div className="p-6 rounded-2xl surface-card border border-chrome shadow-2xl">
+              <div className="flex items-center justify-between pb-4 border-b border-subtle mb-4">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-rose-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-amber-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+                  <span className="text-xs font-mono text-slate-400 ml-2">
+                    DepLenz Codebase Map
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                  Free-Form Canvas
+                </span>
+              </div>
+
+              {/* Mini interactive-map mock — same flow/port grammar as the real canvas.
+                  Edge endpoints land exactly on box-edge midpoints, so the port
+                  dots plug into the border instead of floating at corners. */}
+              <div className="rounded-xl surface-inset border border-subtle p-2 mb-4">
+                <svg
+                  viewBox="0 0 380 172"
+                  className="w-full h-auto select-none"
+                  aria-hidden="true"
+                >
+                  {/* handleScan() → TreeView() */}
+                  <path
+                    d="M 120 43 C 148 43, 148 78, 176 78"
+                    fill="none"
+                    stroke="var(--color-slate-600)"
+                    strokeWidth="1.4"
+                  />
+                  <path
+                    d="M 120 43 C 148 43, 148 78, 176 78"
+                    fill="none"
+                    className="dlc-edge-flow-soft"
+                  />
+                  <circle cx="176" cy="78" r="2.5" className="dlc-edge-port" />
+
+                  {/* useFiles() → TreeView() */}
+                  <path
+                    d="M 120 129 C 148 129, 148 90, 176 90"
+                    fill="none"
+                    stroke="var(--color-slate-600)"
+                    strokeWidth="1.4"
+                  />
+                  <path
+                    d="M 120 129 C 148 129, 148 90, 176 90"
+                    fill="none"
+                    className="dlc-edge-flow-soft"
+                  />
+                  <circle cx="176" cy="90" r="2.5" className="dlc-edge-port" />
+
+                  {/* TreeView() → Row (highlighted: strong flow) */}
+                  <path
+                    d="M 292 78 C 316 78, 318 49, 340 49"
+                    fill="none"
+                    stroke="var(--color-purple-400)"
+                    strokeWidth="1.8"
+                  />
+                  <path
+                    d="M 292 78 C 316 78, 318 49, 340 49"
+                    fill="none"
+                    className="dlc-edge-flow"
+                  />
+                  <circle
+                    cx="340"
+                    cy="49"
+                    r="3.2"
+                    className="dlc-edge-port dlc-edge-port-hot"
+                  />
+
+                  {/* react (pkg) → TreeView() — dependency edge, dotted */}
+                  <path
+                    d="M 340 123 C 316 123, 316 92, 292 92"
+                    fill="none"
+                    stroke="var(--color-slate-600)"
+                    strokeWidth="1.3"
+                    strokeDasharray="2 5"
+                  />
+                  <path
+                    d="M 340 123 C 316 123, 316 92, 292 92"
+                    fill="none"
+                    className="dlc-edge-flow-soft"
+                  />
+                  <circle cx="292" cy="92" r="2.5" className="dlc-edge-port" />
+
+                  {/* caller node: function */}
+                  <g>
+                    <rect
+                      x="8"
+                      y="24"
+                      width="112"
+                      height="38"
+                      rx="10"
+                      fill="var(--surface-raised)"
+                      stroke="var(--border-chrome)"
+                    />
+                    <rect
+                      x="16"
+                      y="32"
+                      width="22"
+                      height="22"
+                      rx="6"
+                      fill="rgba(56,189,248,0.16)"
+                      stroke="rgba(56,189,248,0.45)"
+                    />
+                    <text
+                      x="27"
+                      y="47"
+                      textAnchor="middle"
+                      fontSize="9"
+                      fontWeight="700"
+                      fill="#38bdf8"
+                      fontFamily="monospace"
+                    >
+                      fn
+                    </text>
+                    <text
+                      x="44"
+                      y="39"
+                      fontSize="10"
+                      fontWeight="600"
+                      fill="var(--color-slate-200)"
+                      fontFamily="monospace"
+                    >
+                      handleScan()
+                    </text>
+                    <text
+                      x="44"
+                      y="52"
+                      fontSize="7.5"
+                      fill="var(--color-slate-500)"
+                      fontFamily="monospace"
+                    >
+                      App.tsx · ln 148
+                    </text>
+                  </g>
+
+                  {/* caller node: hook */}
+                  <g>
+                    <rect
+                      x="8"
+                      y="110"
+                      width="112"
+                      height="38"
+                      rx="10"
+                      fill="var(--surface-raised)"
+                      stroke="var(--border-chrome)"
+                    />
+                    <rect
+                      x="16"
+                      y="118"
+                      width="22"
+                      height="22"
+                      rx="6"
+                      fill="rgba(52,211,153,0.16)"
+                      stroke="rgba(52,211,153,0.45)"
+                    />
+                    <text
+                      x="27"
+                      y="133"
+                      textAnchor="middle"
+                      fontSize="9"
+                      fontWeight="700"
+                      fill="#34d399"
+                      fontFamily="monospace"
+                    >
+                      use
+                    </text>
+                    <text
+                      x="44"
+                      y="125"
+                      fontSize="10"
+                      fontWeight="600"
+                      fill="var(--color-slate-200)"
+                      fontFamily="monospace"
+                    >
+                      useFiles()
+                    </text>
+                    <text
+                      x="44"
+                      y="138"
+                      fontSize="7.5"
+                      fill="var(--color-slate-500)"
+                      fontFamily="monospace"
+                    >
+                      hooks.ts · ln 12
+                    </text>
+                  </g>
+
+                  {/* focused component node (selected, aligned glow) */}
+                  <g>
+                    <rect
+                      x="172"
+                      y="58"
+                      width="124"
+                      height="52"
+                      rx="15"
+                      fill="none"
+                      stroke="var(--color-purple-400)"
+                      strokeWidth="2.5"
+                      opacity="0.3"
+                    />
+                    <rect
+                      x="176"
+                      y="62"
+                      width="116"
+                      height="44"
+                      rx="12"
+                      fill="var(--surface-card)"
+                      stroke="var(--color-purple-400)"
+                      strokeWidth="1.8"
+                    />
+                    <rect
+                      x="186"
+                      y="73"
+                      width="22"
+                      height="22"
+                      rx="6"
+                      fill="rgba(192,132,252,0.16)"
+                      stroke="rgba(192,132,252,0.45)"
+                    />
+                    <text
+                      x="197"
+                      y="88"
+                      textAnchor="middle"
+                      fontSize="9"
+                      fontWeight="700"
+                      fill="#c084fc"
+                      fontFamily="monospace"
+                    >
+                      UI
+                    </text>
+                    <text
+                      x="214"
+                      y="80"
+                      fontSize="10"
+                      fontWeight="700"
+                      fill="var(--color-slate-100)"
+                      fontFamily="monospace"
+                    >
+                      TreeView()
+                    </text>
+                    <text
+                      x="214"
+                      y="94"
+                      fontSize="7.5"
+                      fill="var(--color-slate-500)"
+                      fontFamily="monospace"
+                    >
+                      Tree.tsx · ln 34
+                    </text>
+                  </g>
+
+                  {/* callee: component */}
+                  <g>
+                    <rect
+                      x="340"
+                      y="30"
+                      width="36"
+                      height="38"
+                      rx="10"
+                      fill="var(--surface-raised)"
+                      stroke="var(--border-chrome)"
+                    />
+                    <text
+                      x="358"
+                      y="47"
+                      textAnchor="middle"
+                      fontSize="8.5"
+                      fontWeight="700"
+                      fill="#c084fc"
+                      fontFamily="monospace"
+                    >
+                      Row
+                    </text>
+                    <text
+                      x="358"
+                      y="61"
+                      textAnchor="middle"
+                      fontSize="7"
+                      fill="var(--color-slate-500)"
+                      fontFamily="monospace"
+                    >
+                      UI
+                    </text>
+                  </g>
+
+                  {/* callee: package (edge flows react → TreeView) */}
+                  <g>
+                    <rect
+                      x="340"
+                      y="104"
+                      width="36"
+                      height="38"
+                      rx="10"
+                      fill="var(--surface-raised)"
+                      stroke="var(--border-chrome)"
+                    />
+                    <text
+                      x="358"
+                      y="121"
+                      textAnchor="middle"
+                      fontSize="8.5"
+                      fontWeight="700"
+                      fill="#818cf8"
+                      fontFamily="monospace"
+                    >
+                      react
+                    </text>
+                    <text
+                      x="358"
+                      y="135"
+                      textAnchor="middle"
+                      fontSize="7"
+                      fill="var(--color-slate-500)"
+                      fontFamily="monospace"
+                    >
+                      pkg
+                    </text>
+                  </g>
+                </svg>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 font-mono mb-4 px-1">
+                <span>• dots flow caller → callee</span>
+                <span>• drag nodes anywhere</span>
+                <span>• click to trace</span>
+                <span>• double-click to focus</span>
+              </div>
+
+              {/* Call flow summary */}
+              <div className="space-y-3 font-mono text-xs">
+                <div className="p-3 rounded-xl surface-raised border border-subtle">
+                  <div className="text-[10px] uppercase tracking-wider text-indigo-400 font-bold mb-1">
+                    ▲ Upstream Callers (2 dependents)
+                  </div>
+                  <div className="text-slate-200">
+                    <span className="text-purple-400">fn</span> handleScan() •{" "}
+                    <span className="text-emerald-400">use</span> useFiles()
+                  </div>
+                </div>
+
+                <div className="text-center text-slate-500 text-xs">
+                  ▼ invokes
+                </div>
+
+                <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between text-[11px]">
+                  <div className="text-ok">
+                    <strong>Surgical Prompt Size:</strong> ~280 tokens
+                  </div>
+                  <div className="text-slate-400 line-through">
+                    Whole Repo: ~15,200
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-ok font-bold">
+                    -98% Tokens
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature Spotlight: Smart Paste */}
+      <section
+        id="smart-paste"
+        className="py-16 border-t border-chrome scroll-mt-16"
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+            {/* Explanation column (first on mobile, right on desktop) */}
+            <div className="lg:order-2">
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-medium mb-4">
+                <ClipboardPaste className="w-3.5 h-3.5" />
+                <span>Feature Spotlight: Smart Paste</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight mb-4">
+                AI Answers That Paste Straight Back Into Your Codebase
+              </h2>
+              <p className="text-sm text-slate-400 leading-relaxed mb-6">
+                Smart Paste turns every surgical prompt into a two-way street.
+                It appends a strict output contract — generated from the live
+                dependency tree — so the model returns{" "}
+                <strong className="text-slate-200">
+                  complete files in parseable blocks
+                </strong>
+                , never diffs or truncated snippets. Paste the raw response into
+                the Smart Paste Inbox and DepLenz maps every block onto your
+                loaded project, ready to copy or export without breaking a
+                single caller.
+              </p>
+
+              <div className="space-y-4 mb-8">
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    1
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Dependency-Aware Output Contract
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      The contract is built from the live dependency tree: it
+                      lists the target's upstream callers (contracts that must
+                      keep compiling), the downstream helpers to reuse, and the
+                      npm packages already available — so edits respect the real
+                      structure of your codebase.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    2
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Machine-Parseable File Blocks
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Every changed file comes back wrapped in{" "}
+                      <code className="text-emerald-400">
+                        {"<<<SMART_PASTE_FILE>>>"}
+                      </code>{" "}
+                      markers with a{" "}
+                      <code className="text-emerald-400">modify</code>,{" "}
+                      <code className="text-emerald-400">create</code> or{" "}
+                      <code className="text-emerald-400">delete</code> action —
+                      complete file contents only, no markdown fences, no "rest
+                      unchanged" placeholders.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    3
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Smart Paste Inbox
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Paste the raw LLM response back into DepLenz: every block
+                      is extracted, badged by action, checked against the loaded
+                      project, and surfaced with per-file line counts, marker
+                      tallies and protocol warnings.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    4
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Toggleable Marker Comments
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Added or changed regions are tagged with{" "}
+                      <code className="text-emerald-400">[SMART-PASTE]</code>{" "}
+                      comments so reviewers can spot AI edits at a glance.
+                      Disable the option and markers are automatically stripped
+                      from every export — copy, download and ZIP.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 font-mono text-xs font-bold">
+                    5
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100">
+                      Per-File Copy or ZIP Export
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Copy any changed file to the clipboard, download it on its
+                      own, or bundle everything into a ZIP that preserves your
+                      folder structure — with a human-readable manifest of every
+                      change, including deletions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onLoadSample}
+                className="flex items-center space-x-2 text-xs font-semibold px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-sm"
+              >
+                <span>Try Smart Paste in Demo</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Inbox mockup column (left on desktop) */}
+            <div className="p-6 rounded-2xl surface-card border border-chrome shadow-2xl lg:order-1">
+              {/* Window chrome */}
+              <div className="flex items-center justify-between pb-4 border-b border-subtle mb-4">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-rose-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-amber-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+                  <span className="text-xs font-mono text-slate-400 ml-2">
+                    Smart Paste Inbox
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  3 changed files
+                </span>
+              </div>
+
+              {/* Round-trip flow */}
+              <div className="flex flex-wrap items-center gap-1.5 mb-4 text-[10px] font-mono">
+                <span className="px-2 py-1 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/25">
+                  Prompt + contract
+                </span>
+                <ArrowRight className="w-3 h-3 text-slate-500 shrink-0" />
+                <span className="px-2 py-1 rounded-md surface-raised text-slate-300 border border-subtle">
+                  LLM
+                </span>
+                <ArrowRight className="w-3 h-3 text-slate-500 shrink-0" />
+                <span className="px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+                  Paste back &amp; parse
+                </span>
+                <ArrowRight className="w-3 h-3 text-slate-500 shrink-0" />
+                <span className="px-2 py-1 rounded-md surface-raised text-slate-300 border border-subtle">
+                  Copy / ZIP
+                </span>
+              </div>
+
+              {/* Protocol block preview */}
+              <div className="rounded-xl surface-inset border border-subtle p-3 mb-4 font-mono text-[11px] leading-relaxed overflow-x-auto">
+                <div className="text-emerald-400 whitespace-nowrap">
+                  {
+                    '<<<SMART_PASTE_FILE path="src/components/TreeView.tsx" action="modify">>>'
+                  }
+                </div>
+                <div className="text-slate-500 whitespace-nowrap">
+                  {"  // [SMART-PASTE] lazy-load expanded branches"}
+                </div>
+                <div className="text-slate-200 whitespace-nowrap">
+                  {"  export function TreeView(props: Props) {"}
+                </div>
+                <div className="text-slate-600 whitespace-nowrap">
+                  {"    …full file returned — never a diff…"}
+                </div>
+                <div className="text-emerald-400 whitespace-nowrap">
+                  {"<<<END_SMART_PASTE_FILE>>>"}
+                </div>
+              </div>
+
+              {/* Parsed file rows */}
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center gap-2.5 p-2.5 rounded-xl surface-inset border border-subtle">
+                  <div className="p-1.5 rounded-lg surface-raised border border-subtle shrink-0">
+                    <FilePenLine className="w-3.5 h-3.5 text-slate-300" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs font-semibold text-slate-200 truncate">
+                        src/components/TreeView.tsx
+                      </span>
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-sky-500/15 text-sky-400 border-sky-500/30">
+                        modify
+                      </span>
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                        2 markers
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                      412 lines • 14.2 KB
+                    </p>
+                  </div>
+                  <span className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg surface-raised border border-chrome text-slate-300 text-[11px] shrink-0">
+                    <Copy className="w-3 h-3" />
+                    <span>Copy file</span>
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2.5 p-2.5 rounded-xl surface-inset border border-subtle">
+                  <div className="p-1.5 rounded-lg surface-raised border border-subtle shrink-0">
+                    <FilePlus2 className="w-3.5 h-3.5 text-slate-300" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs font-semibold text-slate-200 truncate">
+                        src/utils/lazyBranch.ts
+                      </span>
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-ok-soft text-ok border-ok">
+                        create
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                      86 lines • 2.1 KB • new file
+                    </p>
+                  </div>
+                  <span className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg surface-raised border border-chrome text-slate-300 text-[11px] shrink-0">
+                    <Copy className="w-3 h-3" />
+                    <span>Copy file</span>
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2.5 p-2.5 rounded-xl surface-inset border border-subtle opacity-80">
+                  <div className="p-1.5 rounded-lg surface-raised border border-subtle shrink-0">
+                    <FileX2 className="w-3.5 h-3.5 text-slate-300" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs font-semibold text-slate-200 truncate">
+                        src/legacy/oldTree.ts
+                      </span>
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-rose-500/15 text-danger border-rose-500/30">
+                        delete
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                      Recorded in the ZIP manifest
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Export bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-subtle">
+                <span className="text-[10px] text-slate-500 font-mono">
+                  Preserves folder structure • SMART_PASTE_MANIFEST.txt included
+                </span>
+                <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium shadow-sm">
+                  <FileArchive className="w-3.5 h-3.5" />
+                  <span>Export ZIP</span>
                 </span>
               </div>
             </div>
@@ -1038,7 +1889,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             </button>
             <span className="text-slate-600">|</span>
             <span className="text-slate-500 font-mono">
-              Keyboard: 1-5 tabs • Cmd+O Open
+              Keyboard: 1-6 tabs • Cmd+O Open
             </span>
           </div>
         </div>

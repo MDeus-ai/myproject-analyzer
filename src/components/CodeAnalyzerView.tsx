@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Code2,
@@ -652,3 +653,4 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
     </div>
   );
 };
+

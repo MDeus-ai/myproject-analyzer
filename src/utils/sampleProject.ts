@@ -214,46 +214,55 @@ const sampleFilesData: SampleTemplateFile[] = [
   {
     relativePath: "acme-saas-platform/src/index.ts",
     content:
-      'import express from "express";\nconst app = express();\napp.listen(3000, () => console.log("Ready"));',
+      'import express from "express";\nimport { connectDatabase } from "./config/database";\nimport { startServer } from "./server";\n\nexport function main() {\n  connectDatabase();\n  startServer();\n}\n\nmain();',
+    type: "text/typescript",
+  },
+  {
+    relativePath: "acme-saas-platform/src/server.ts",
+    content:
+      'import { validateToken } from "./config/auth";\n\nexport function startServer() {\n  console.log("Server listening on port 3000");\n}\n\nexport function handleRequest(token: string) {\n  return validateToken(token);\n}',
     type: "text/typescript",
   },
   {
     relativePath: "acme-saas-platform/src/config/database.ts",
-    content: 'export const dbConfig = { host: "localhost", port: 5432 };',
+    content:
+      'export const dbConfig = { host: "localhost", port: 5432 };\n\nexport function connectDatabase() {\n  console.log("Connected to PostgreSQL at", dbConfig.host);\n  return true;\n}\n\nexport function queryUser(userId: string) {\n  return { id: userId, role: "admin", name: "Alex" };\n}',
     type: "text/typescript",
   },
   {
     relativePath: "acme-saas-platform/src/config/auth.ts",
-    content: 'export const jwtOptions = { expiresIn: "24h" };',
+    content:
+      'import { queryUser } from "./database";\n\nexport function validateToken(token: string): boolean {\n  return token.length > 10;\n}\n\nexport function createSession(userId: string) {\n  const user = queryUser(userId);\n  return { token: "tok_" + userId, user };\n}\n\nexport function useAuth() {\n  return { isAuthenticated: true, user: "Alex" };\n}',
     type: "text/typescript",
   },
   {
     relativePath: "acme-saas-platform/src/components/Header.tsx",
     content:
-      'export function Header() { return <header className="navbar">Acme SaaS</header>; }',
+      'import React from "react";\nimport { Button } from "./ui/Button";\nimport { useAuth } from "../config/auth";\n\nexport function Header() {\n  const auth = useAuth();\n  return (\n    <header className="navbar">\n      <h1>Acme SaaS</h1>\n      <Button onClick={() => console.log("Logout")}>Logout {auth.user}</Button>\n    </header>\n  );\n}',
     type: "text/typescript",
   },
   {
     relativePath: "acme-saas-platform/src/components/Sidebar.tsx",
-    content: "export function Sidebar() { return <aside>Navigation</aside>; }",
+    content:
+      'import React from "react";\nimport { Button } from "./ui/Button";\n\nexport function Sidebar() {\n  return (\n    <aside className="sidebar">\n      <nav>\n        <Button>Overview</Button>\n        <Button>Settings</Button>\n      </nav>\n    </aside>\n  );\n}',
     type: "text/typescript",
   },
   {
     relativePath: "acme-saas-platform/src/components/Dashboard.tsx",
     content:
-      "export function Dashboard() { return <main>Metrics & KPIs</main>; }",
+      'import React, { useState } from "react";\nimport { Header } from "./Header";\nimport { Sidebar } from "./Sidebar";\nimport { Modal } from "./ui/Modal";\nimport { Button } from "./ui/Button";\nimport { queryUser } from "../config/database";\n\nexport function Dashboard() {\n  const [isModalOpen, setIsModalOpen] = useState(false);\n  const user = queryUser("usr_42");\n  return (\n    <main className="dashboard">\n      <Header />\n      <div className="layout">\n        <Sidebar />\n        <section>\n          <h2>Welcome {user.name}</h2>\n          <Button onClick={() => setIsModalOpen(true)}>Open Details</Button>\n          <Modal isOpen={isModalOpen} />\n        </section>\n      </div>\n    </main>\n  );\n}',
     type: "text/typescript",
   },
   {
     relativePath: "acme-saas-platform/src/components/ui/Button.tsx",
     content:
-      "export function Button({ children }: { children: React.ReactNode }) { return <button>{children}</button>; }",
+      'import React from "react";\n\nexport function Button({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {\n  return <button className="btn" onClick={onClick}>{children}</button>;\n}',
     type: "text/typescript",
   },
   {
     relativePath: "acme-saas-platform/src/components/ui/Modal.tsx",
     content:
-      'export function Modal({ isOpen }: { isOpen: boolean }) { return isOpen ? <div className="modal" /> : null; }',
+      'import React from "react";\nimport { Button } from "./Button";\n\nexport function Modal({ isOpen }: { isOpen: boolean }) {\n  if (!isOpen) return null;\n  return (\n    <div className="modal-backdrop">\n      <div className="modal-content">\n        <h3>Dialog</h3>\n        <Button>Close</Button>\n      </div>\n    </div>\n  );\n}',
     type: "text/typescript",
   },
   {
