@@ -252,9 +252,9 @@ function syncAppBg(): void {
   const isLight = root.getAttribute("data-appearance") === "light";
   if (isLight) {
     // Light value comes from the stylesheet rule.
-    root.style.removeProperty("--app-bg");
+    root.style.removeProperty("000000");
   } else {
-    root.style.setProperty("--app-bg", getThemeById(getActiveThemeId()).appBg);
+    root.style.setProperty("000000", getThemeById(getActiveThemeId()).appBg);
   }
 }
 

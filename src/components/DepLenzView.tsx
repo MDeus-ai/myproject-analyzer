@@ -78,6 +78,9 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
 
   // Main UI State
   const [subView, setSubView] = useState<SubViewMode>("graph");
+  // On small screens the symbol directory and the content pane are shown
+  // one at a time; on md+ both render side by side as before.
+  const [mobilePane, setMobilePane] = useState<"list" | "content">("list");
   const [selectedFolder, setSelectedFolder] = useState<string>("all");
   const [selectedKind, setSelectedKind] = useState<"all" | SymbolKind>("all");
   const [symbolFilterText, setSymbolFilterText] = useState<string>("");
@@ -119,6 +122,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
     setNavHistory([]);
     setSmartPasteInput("");
     setSmartPasteResult(null);
+    setMobilePane("list");
   }, [analysis]);
 
   // Update selected symbol safely if current selection is invalid
@@ -142,6 +146,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
         setNavHistory((prev) => [...prev, selectedSymbolId]);
       }
       setSelectedSymbolId(symId);
+      setMobilePane("content"); // jump straight to the detail pane on phones
     },
     [selectedSymbolId],
   );
@@ -346,26 +351,14 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
     }
   };
 
-  // Badge styling helpers
-  const getKindBadgeClass = (kind: SymbolKind) => {
-    switch (kind) {
-      case "component":
-        return "bg-purple-500/15 text-purple-400 border-purple-500/30";
-      case "hook":
-        return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
-      case "function":
-        return "bg-sky-500/15 text-sky-400 border-sky-500/30";
-      case "class":
-        return "bg-amber-500/15 text-amber-400 border-amber-500/30";
-      default:
-        return "bg-slate-500/15 text-slate-400 border-slate-500/30";
-    }
-  };
+  // Badge styling helpers — kind badges share the graph's adaptive accent
+  // variable, so a badge always matches its map node, in both appearances.
+  const getKindBadgeClass = (kind: SymbolKind) => `kind-badge kind-${kind}`;
 
   const getImpactBadgeClass = (level: "low" | "medium" | "high") => {
     switch (level) {
       case "high":
-        return "bg-rose-500/15 text-danger border-rose-500/30";
+        return "bg-danger-soft text-danger border-danger";
       case "medium":
         return "bg-warn-soft text-warn border-warn";
       case "low":
@@ -381,7 +374,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
       {/* ------------------------------------------------------------------ */}
       <div className="surface-raised border-b border-chrome px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+          <div className="w-8 h-8 rounded-lg icon-chip border flex items-center justify-center shrink-0">
             <Network className="w-4 h-4" />
           </div>
           <div>
@@ -389,7 +382,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
               <h2 className="text-sm font-bold text-slate-100 tracking-tight">
                 DepLenz
               </h2>
-              <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full chip-accent border">
                 Web Dev Lens
               </span>
             </div>
@@ -439,11 +432,28 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
           )}
         </div>
 
+        {/* Mobile-only: return to the symbol directory */}
+        <button
+          type="button"
+          onClick={() => setMobilePane("list")}
+          className={`md:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+            mobilePane === "list"
+              ? "bg-purple-600 text-white border-purple-600"
+              : "surface-card text-slate-300 border-chrome"
+          }`}
+        >
+          <Code2 className="w-3.5 h-3.5" />
+          <span>Symbols</span>
+        </button>
+
         {/* Sub-view switcher */}
         <div className="flex items-center p-0.5 rounded-lg surface-card border border-chrome">
           <button
             type="button"
-            onClick={() => setSubView("graph")}
+            onClick={() => {
+              setSubView("graph");
+              setMobilePane("content");
+            }}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
               subView === "graph"
                 ? "bg-purple-600 text-white shadow-sm"
@@ -455,7 +465,10 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setSubView("map")}
+            onClick={() => {
+              setSubView("map");
+              setMobilePane("content");
+            }}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
               subView === "map"
                 ? "bg-purple-600 text-white shadow-sm"
@@ -467,7 +480,10 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setSubView("search")}
+            onClick={() => {
+              setSubView("search");
+              setMobilePane("content");
+            }}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
               subView === "search"
                 ? "bg-purple-600 text-white shadow-sm"
@@ -484,7 +500,10 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setSubView("surgical")}
+            onClick={() => {
+              setSubView("surgical");
+              setMobilePane("content");
+            }}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
               subView === "surgical"
                 ? "bg-purple-600 text-white shadow-sm"
@@ -524,9 +543,13 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
       {/* ------------------------------------------------------------------ */}
       {/* Main Dual-Pane Layout                                               */}
       {/* ------------------------------------------------------------------ */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* LEFT PANE: Function Directory & Filters */}
-        <aside className="w-80 md:w-96 border-r border-chrome flex flex-col surface-card shrink-0">
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        {/* LEFT PANE: Function Directory & Filters — full-width pane on mobile */}
+        <aside
+          className={`${
+            mobilePane === "content" ? "hidden" : "flex"
+          } md:flex w-full md:w-80 lg:w-96 border-r border-chrome flex-col surface-card shrink-0`}
+        >
           {/* Filters Bar */}
           <div className="p-3 border-b border-subtle space-y-2.5">
             <div className="relative">
@@ -610,7 +633,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                     onClick={() => handleSelectSymbol(sym.id)}
                     className={`w-full text-left p-3 transition-colors cursor-pointer ${
                       isSelected
-                        ? "bg-purple-600/15 border-l-4 border-purple-500"
+                        ? "bg-accent-soft border-l-4 border-accent"
                         : "hover:bg-[var(--surface-hover)]"
                     }`}
                   >
@@ -657,7 +680,11 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
         </aside>
 
         {/* RIGHT PANE: Interactive Content */}
-        <main className="flex-1 overflow-y-auto flex flex-col surface-canvas">
+        <main
+          className={`${
+            mobilePane === "list" ? "hidden" : "flex"
+          } md:flex flex-1 overflow-y-auto flex-col surface-canvas min-w-0`}
+        >
           {/* MODE 1: VISUAL DEPENDENCY TREE & CALL GRAPH */}
           {subView === "graph" && (
             <div className="p-4 sm:p-6 space-y-6">
@@ -856,10 +883,10 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                   <div className="lg:col-span-3 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
-                        <ArrowRight className="w-3.5 h-3.5 text-sky-400" />
+                        <ArrowRight className="w-3.5 h-3.5 text-info" />
                         <span>Dependencies & Callees</span>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full surface-raised text-sky-400 border border-sky-500/30">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full surface-raised text-info border border-info">
                         {activeNode.dependencies.length +
                           activeNode.externalDependencies.length}
                       </span>
@@ -883,7 +910,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                             <div
                               key={`dep-${idx}`}
                               onClick={() => handleSelectSymbol(dep.symbol.id)}
-                              className="p-3 rounded-xl surface-card border border-subtle hover:border-sky-500/50 hover:bg-[var(--surface-hover)] cursor-pointer transition-all group"
+                              className="p-3 rounded-xl surface-card border border-subtle hover:border-info hover:bg-[var(--surface-hover)] cursor-pointer transition-all group"
                             >
                               <div className="flex items-center justify-between gap-1">
                                 <span
@@ -893,9 +920,9 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                                 >
                                   {dep.symbol.kind}
                                 </span>
-                                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400 transition-colors" />
+                                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-info transition-colors" />
                               </div>
-                              <div className="text-xs font-semibold text-slate-200 group-hover:text-sky-300 mt-1 truncate">
+                              <div className="text-xs font-semibold text-slate-200 group-hover:text-info mt-1 truncate">
                                 {dep.symbol.name}
                               </div>
                               <div className="text-[10px] text-slate-400 truncate mt-0.5 font-mono">
@@ -915,7 +942,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                               key={`pkg-${idx}`}
                               className="p-2.5 rounded-xl surface-raised border border-subtle flex items-center gap-2"
                             >
-                              <Boxes className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              <Boxes className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                               <div className="min-w-0 flex-1">
                                 <span className="text-xs font-medium text-slate-300 block truncate">
                                   {pkg}
@@ -1120,7 +1147,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
           {subView === "surgical" && (
             <div className="p-4 sm:p-6 space-y-5">
               {/* Value Proposition Header */}
-              <div className="p-5 rounded-2xl bg-gradient-to-r from-purple-900/30 to-indigo-900/20 border border-purple-500/30">
+              <div className="p-5 rounded-2xl surface-raised border border-chrome border-l-2 border-l-purple-500">
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-purple-600/30 border border-purple-500/50 flex items-center justify-center text-purple-300 shrink-0">
                     <Target className="w-5 h-5" />
@@ -1189,7 +1216,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
               {/* SMART PASTE: structured output settings */}
               <div className="p-4 rounded-2xl surface-card border border-chrome flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <div className="w-9 h-9 rounded-xl icon-chip border flex items-center justify-center shrink-0">
                     <ClipboardPaste className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
@@ -1197,7 +1224,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                       <h4 className="text-xs font-bold text-slate-100">
                         Smart Paste
                       </h4>
-                      <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-ok border border-ok">
+                      <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-ok-soft text-ok border border-ok">
                         Paste-back ready
                       </span>
                     </div>
@@ -1377,8 +1404,8 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                         change.action === "create"
                           ? "bg-ok-soft text-ok border-ok"
                           : change.action === "delete"
-                            ? "bg-rose-500/15 text-danger border-rose-500/30"
-                            : "bg-sky-500/15 text-sky-400 border-sky-500/30";
+                            ? "bg-danger-soft text-danger border-danger"
+                            : "bg-info-soft text-info border-info";
                       const isCopied = copiedSmartPath === change.path;
 
                       return (
@@ -1502,7 +1529,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
       {/* Syntax Diagnostics Review Modal */}
       {showDiagnosticsModal && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="surface-card border border-chrome rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className="surface-card border border-chrome rounded-2xl max-w-2xl w-full max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden">
             <div className="p-4 border-b border-subtle flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-warn" />

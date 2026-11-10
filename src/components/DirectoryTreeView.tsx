@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import {
   Folder,
@@ -65,11 +64,11 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
     const cat = getFileCategory(file.name, file.type);
     switch (cat) {
       case "code":
-        return <FileCode className="w-3.5 h-3.5 text-sky-400" />;
+        return <FileCode className="w-3.5 h-3.5 text-slate-400" />;
       case "image":
-        return <FileImage className="w-3.5 h-3.5 text-emerald-400" />;
+        return <FileImage className="w-3.5 h-3.5 text-slate-400" />;
       case "document":
-        return <FileTextIcon className="w-3.5 h-3.5 text-blue-400" />;
+        return <FileTextIcon className="w-3.5 h-3.5 text-slate-400" />;
       default:
         return <File className="w-3.5 h-3.5 text-slate-400" />;
     }
@@ -106,9 +105,9 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
           </button>
 
           {isCollapsed ? (
-            <Folder className="w-4 h-4 text-amber-400 shrink-0" />
+            <Folder className="w-4 h-4 text-slate-400 shrink-0" />
           ) : (
-            <FolderOpen className="w-4 h-4 text-amber-300 shrink-0" />
+            <FolderOpen className="w-4 h-4 text-slate-300 shrink-0" />
           )}
 
           <span className="font-semibold text-xs tracking-tight text-slate-100 font-mono">
@@ -119,7 +118,7 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
             <span className="px-1.5 py-0.5 rounded surface-raised text-slate-400 font-mono border border-subtle">
               {node.totalFilesCount} files
             </span>
-            <span className="px-1.5 py-0.5 rounded surface-raised text-blue-400 font-mono border border-subtle">
+            <span className="px-1.5 py-0.5 rounded surface-raised text-slate-400 font-mono border border-subtle">
               {formatBytes(node.totalSize)}
             </span>
           </div>
@@ -143,10 +142,10 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
                   key={file.id}
                   onClick={() => onSelectFile(file)}
                   style={{ paddingLeft: `${Math.max((level + 1) * 20, 8)}px` }}
-                  className="flex items-center space-x-2 py-1 px-2 rounded-lg hover:bg-blue-500/10 cursor-pointer transition-colors text-slate-300 text-xs font-mono group"
+                  className="flex items-center space-x-2 py-1 px-2 rounded-lg hover:bg-[var(--surface-hover)] cursor-pointer transition-colors text-slate-300 text-xs font-mono group"
                 >
                   <span className="shrink-0">{renderFileIcon(file)}</span>
-                  <span className="truncate group-hover:text-blue-300 transition-colors font-sans font-medium">
+                  <span className="truncate group-hover:text-slate-100 transition-colors font-sans font-medium">
                     {file.name}
                   </span>
                   <span className="text-[10px] text-slate-500 font-mono ml-auto">
@@ -187,7 +186,7 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Highlight file in hierarchy..."
-            className="w-full pl-8 pr-3 py-1.5 surface-inset rounded-lg border border-subtle text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            className="w-full pl-8 pr-3 py-1.5 surface-inset rounded-lg border border-subtle text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
           />
         </div>
 
@@ -216,7 +215,7 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
           <button
             type="button"
             onClick={handleCopyAsciiTree}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-sm transition-all active:scale-95"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium shadow-sm transition-all active:scale-95"
             title="Copy formatted Unicode tree structure to clipboard"
           >
             {copiedTree ? (
@@ -234,13 +233,12 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
         </div>
       </div>
 
-      {/* Tree Visual Container */}
+      {/* Tree Visual Container — horizontal scroll for deep nesting on phones */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <div className="max-w-4xl mx-auto surface-card rounded-2xl border border-chrome p-4 sm:p-6 shadow-lg">
-          {renderNode(rootNode, 0)}
+        <div className="max-w-4xl mx-auto surface-card rounded-2xl border border-chrome p-4 sm:p-6 shadow-lg overflow-x-auto">
+          <div className="min-w-max pr-2">{renderNode(rootNode, 0)}</div>
         </div>
       </div>
     </div>
   );
 };
-

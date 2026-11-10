@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { Palette, Check, Sun, Moon } from "lucide-react";
 import {
@@ -64,7 +63,7 @@ export const ThemeSwitcher: React.FC = () => {
         className="flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-slate-100 hover:bg-[var(--surface-hover)] transition-colors border border-subtle"
         title={`Theme: ${activeTheme.name} (${appearance} mode)`}
       >
-        <Palette className="w-3.5 h-3.5 text-purple-400" />
+        <Palette className="w-3.5 h-3.5 text-accent" />
         <span className="hidden sm:inline">Theme</span>
         <span
           className="w-2.5 h-2.5 rounded-full shrink-0"
@@ -85,7 +84,7 @@ export const ThemeSwitcher: React.FC = () => {
                 onClick={() => handleAppearance("light")}
                 className={`flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
                   appearance === "light"
-                    ? "bg-purple-600/15 border-purple-500/40 text-purple-300"
+                    ? "chip-accent"
                     : "surface-raised border-chrome text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -97,7 +96,7 @@ export const ThemeSwitcher: React.FC = () => {
                 onClick={() => handleAppearance("dark")}
                 className={`flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
                   appearance === "dark"
-                    ? "bg-purple-600/15 border-purple-500/40 text-purple-300"
+                    ? "bg-purple-600/15 border-purple-500/40 text-accent"
                     : "surface-raised border-chrome text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -123,7 +122,7 @@ export const ThemeSwitcher: React.FC = () => {
                   onClick={() => handleSelectTheme(theme.id)}
                   className={`w-full flex items-center space-x-3 p-2 rounded-xl text-left transition-all ${
                     isActive
-                      ? "bg-purple-600/12 border border-purple-500/35"
+                      ? "chip-accent border"
                       : "border border-transparent hover:bg-[var(--surface-hover)]"
                   }`}
                 >
@@ -134,7 +133,7 @@ export const ThemeSwitcher: React.FC = () => {
                   <span className="min-w-0 flex-1">
                     <span
                       className={`block text-xs font-semibold ${
-                        isActive ? "text-purple-300" : "text-slate-200"
+                        isActive ? "text-accent" : "text-slate-200"
                       }`}
                     >
                       {theme.name}
@@ -144,7 +143,7 @@ export const ThemeSwitcher: React.FC = () => {
                     </span>
                   </span>
                   {isActive && (
-                    <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <Check className="w-3.5 h-3.5 text-accent shrink-0" />
                   )}
                 </button>
               );
@@ -159,4 +158,3 @@ export const ThemeSwitcher: React.FC = () => {
     </div>
   );
 };
-

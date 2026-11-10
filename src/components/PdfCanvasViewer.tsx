@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -104,8 +103,21 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
         const canvas = document.createElement("canvas");
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
-        canvas.style.width = `${Math.floor(viewport.width / outputScale)}px`;
-        canvas.style.height = `${Math.floor(viewport.height / outputScale)}px`;
+
+        const cssWidth = Math.floor(viewport.width / outputScale);
+        const cssHeight = Math.floor(viewport.height / outputScale);
+        // Fit the page to the available width on narrow screens (phones).
+        // The canvas backing store keeps full resolution, so it stays sharp.
+        const available = container.clientWidth - 32; // container has px-4 padding
+        if (available > 0 && cssWidth > available) {
+          const fit = available / cssWidth;
+          canvas.style.width = `${available}px`;
+          canvas.style.height = `${Math.floor(cssHeight * fit)}px`;
+        } else {
+          canvas.style.width = `${cssWidth}px`;
+          canvas.style.height = `${cssHeight}px`;
+        }
+
         canvas.className = "block mx-auto bg-white rounded-[3px] shadow-2xl";
 
         const wrap = document.createElement("div");
@@ -153,7 +165,7 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
     <div className="absolute inset-0 overflow-y-auto">
       {error ? (
         <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-          <FileWarning className="w-8 h-8 text-rose-400 mb-3" />
+          <FileWarning className="w-8 h-8 text-danger mb-3" />
           <p className="text-slate-300 text-sm font-medium">{error}</p>
           <p className="text-slate-500 text-xs mt-1">
             Try downloading the PDF instead — the file itself is unaffected.
@@ -161,7 +173,7 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
         </div>
       ) : !data ? (
         <div className="h-full flex flex-col items-center justify-center p-8">
-          <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mb-3" />
+          <Loader2 className="w-8 h-8 text-slate-400 animate-spin mb-3" />
           <p className="text-slate-300 text-sm font-medium">
             Generating PDF preview…
           </p>
@@ -170,8 +182,8 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
         <>
           {(isRendering || isRegenerating) && (
             <div className="sticky top-3 z-10 flex justify-center pointer-events-none">
-              <div className="flex items-center space-x-2 px-2.5 py-1.5 rounded-lg bg-slate-900/85 backdrop-blur-sm border border-slate-700 text-[11px] text-slate-200 shadow-lg">
-                <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
+              <div className="flex items-center space-x-2 px-2.5 py-1.5 rounded-lg surface-card border border-chrome text-[11px] text-slate-200 shadow-lg">
+                <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />
                 <span>{isRegenerating ? "Updating PDF…" : "Rendering…"}</span>
               </div>
             </div>
@@ -182,4 +194,3 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
     </div>
   );
 };
-

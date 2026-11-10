@@ -1,4 +1,3 @@
-
 import React from "react";
 import { BarChart3, AlertTriangle } from "lucide-react";
 import { FolderAnalysisStats, ProcessedFile } from "../types";
@@ -25,7 +24,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     <div className="flex flex-col h-full bg-[var(--app-bg)] text-slate-100 overflow-y-auto">
       {/* Slim single header row */}
       <div className="surface-header border-b border-chrome px-4 sm:px-5 py-2 flex items-center space-x-2.5">
-        <div className="p-1.5 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/25">
+        <div className="p-1.5 rounded-lg icon-chip border">
           <BarChart3 className="w-4 h-4" />
         </div>
         <div className="leading-tight">
@@ -45,7 +44,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <span className="text-xs text-slate-400 block mb-1">
               Total Files Stripped
             </span>
-            <span className="text-2xl font-bold text-blue-400 font-mono">
+            <span className="text-2xl font-bold text-slate-50 font-mono">
               {stats.totalFiles.toLocaleString()}
             </span>
           </div>
@@ -54,7 +53,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <span className="text-xs text-slate-400 block mb-1">
               Total Subdirectories
             </span>
-            <span className="text-2xl font-bold text-indigo-400 font-mono">
+            <span className="text-2xl font-bold text-slate-50 font-mono">
               {stats.totalFolders.toLocaleString()}
             </span>
           </div>
@@ -63,7 +62,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <span className="text-xs text-slate-400 block mb-1">
               Total Folder Size
             </span>
-            <span className="text-2xl font-bold text-ok font-mono">
+            <span className="text-2xl font-bold text-slate-50 font-mono">
               {formatBytes(stats.totalSize)}
             </span>
           </div>
@@ -72,7 +71,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <span className="text-xs text-slate-400 block mb-1">
               Max Hierarchy Depth
             </span>
-            <span className="text-2xl font-bold text-purple-400 font-mono">
+            <span className="text-2xl font-bold text-slate-50 font-mono">
               {stats.maxDepth} levels
             </span>
           </div>
@@ -133,7 +132,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                     </div>
                     <div className="w-full surface-inset h-2 rounded-full overflow-hidden border border-subtle">
                       <div
-                        className="bg-blue-500 h-full rounded-full transition-all duration-300"
+                        className="bg-purple-500 h-full rounded-full transition-all duration-300"
                         style={{ width: `${percent}%` }}
                       />
                     </div>
@@ -180,4 +179,3 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     </div>
   );
 };
-

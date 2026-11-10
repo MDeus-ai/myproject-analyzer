@@ -1,4 +1,3 @@
-
 /**
  * @license
  * SPDX-License-Identifier: MIT
@@ -386,7 +385,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[var(--app-bg)] text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-dvh w-full bg-[var(--app-bg)] text-slate-100 overflow-hidden font-sans">
       {/* Hidden WebKit folder input */}
       <input
         ref={folderInputRef}
@@ -492,7 +491,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setIsExclusionModalOpen(true)}
-                    className="text-amber-400 hover:text-amber-300 underline font-medium ml-4 shrink-0 cursor-pointer"
+                    className="text-warn hover:opacity-80 underline font-medium ml-4 shrink-0 cursor-pointer"
                   >
                     Review Exclusions
                   </button>
@@ -502,8 +501,8 @@ export default function App() {
 
           {/* Persistent warning banner when possible secrets were detected */}
           {detectedSecretFiles.length > 0 && resolvedFiles.length > 0 && (
-            <div className="bg-rose-500/10 border-b border-rose-500/30 px-4 py-1.5 flex items-center space-x-2 text-xs text-rose-300">
-              <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+            <div className="bg-danger-soft border-b border-danger px-4 py-1.5 flex items-center space-x-2 text-xs text-danger">
+              <ShieldAlert className="w-4 h-4 text-danger shrink-0" />
               <span>
                 <strong>Possible secrets detected:</strong>{" "}
                 {detectedSecretFiles.slice(0, 3).join(", ")}
@@ -577,10 +576,7 @@ export default function App() {
                 )}
 
                 {activeTab === "deplenz" && (
-                  <DepLenzView
-                    files={rawFiles}
-                    onSelectFile={setPreviewFile}
-                  />
+                  <DepLenzView files={rawFiles} onSelectFile={setPreviewFile} />
                 )}
               </div>
             )}
@@ -621,8 +617,8 @@ export default function App() {
 
       {/* Import success toast */}
       {importToast && !importProgress && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center space-x-3 pl-4 pr-3 py-3 rounded-2xl surface-card border border-chrome shadow-2xl max-w-sm">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+        <div className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-5 z-50 flex items-center space-x-3 pl-4 pr-3 py-3 rounded-2xl surface-card border border-chrome shadow-2xl max-w-sm">
+          <CheckCircle2 className="w-5 h-5 text-ok shrink-0" />
           <div className="text-xs min-w-0">
             <p className="font-semibold text-slate-100">Project loaded</p>
             <p className="text-slate-400 truncate">
@@ -648,4 +644,3 @@ export default function App() {
     </div>
   );
 }
-

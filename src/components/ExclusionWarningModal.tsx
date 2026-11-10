@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from "react";
 import {
   ShieldAlert,
@@ -215,15 +214,15 @@ export const ExclusionWarningModal: React.FC<ExclusionWarningModalProps> = ({
       return <Package className="w-4 h-4 text-warn" />;
     }
     if (lower === ".git") {
-      return <Layers className="w-4 h-4 text-rose-400" />;
+      return <Layers className="w-4 h-4 text-warn" />;
     }
     return <FolderMinus className="w-4 h-4 text-warn" />;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm">
       <div
-        className="w-full max-w-2xl surface-card border border-warn rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="w-full max-w-2xl surface-card border border-warn rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="exclusion-modal-title"
@@ -421,7 +420,7 @@ export const ExclusionWarningModal: React.FC<ExclusionWarningModalProps> = ({
                                 {group.files.length !== 1 ? "s" : ""}
                               </span>
                               {group.hasSecrets && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-danger border border-rose-500/30 font-semibold">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-danger-soft text-danger border border-danger font-semibold">
                                   may contain secrets
                                 </span>
                               )}
@@ -489,7 +488,7 @@ export const ExclusionWarningModal: React.FC<ExclusionWarningModalProps> = ({
           {/* Import summary hint */}
           <div className="p-3 rounded-xl surface-inset border border-subtle flex items-center justify-between text-xs text-slate-400">
             <div className="flex items-center space-x-2">
-              <FileCode2 className="w-4 h-4 text-cyan-400" />
+              <FileCode2 className="w-4 h-4 text-slate-400" />
               <span>
                 Importing will include{" "}
                 <strong className="text-slate-200">
@@ -548,4 +547,3 @@ export const ExclusionWarningModal: React.FC<ExclusionWarningModalProps> = ({
     </div>
   );
 };
-

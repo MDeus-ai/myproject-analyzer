@@ -392,7 +392,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
           {/* Inline nav (xl+) — constrained by flexbox itself */}
           <nav
-            className="hidden xl:flex items-center space-x-6 text-sm text-slate-300 flex-1 min-w-0 overflow-x-auto scrollbar-none whitespace-nowrap"
+            className="hidden min-[1500px]:flex items-center space-x-6 text-sm text-slate-300 flex-1 min-w-0 overflow-x-auto scrollbar-none scroll-fade-x whitespace-nowrap"
             aria-label="Sections"
           >
             <a
@@ -461,7 +461,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
 
         {/* Section nav chip strip — below xl */}
-        <div className="xl:hidden border-t border-subtle">
+        <div className="min-[1500px]:hidden border-t border-subtle">
           <nav
             className="max-w-[1600px] mx-auto px-4 sm:px-6 flex items-center gap-1.5 overflow-x-auto scrollbar-none py-2"
             aria-label="Sections"
@@ -1287,7 +1287,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   ▼ invokes
                 </div>
 
-                <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between text-[11px]">
+                <div className="p-3 rounded-xl bg-ok-soft border border-ok flex items-center justify-between text-[11px]">
                   <div className="text-ok">
                     <strong>Surgical Prompt Size:</strong> ~280 tokens
                   </div>

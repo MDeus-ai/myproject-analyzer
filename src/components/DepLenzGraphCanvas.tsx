@@ -556,6 +556,11 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     raf: number;
   } | null>(null);
 
+  /* ----- touch pinch-to-zoom ------------------------------------------ */
+  const activePointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ startDist: number; startK: number } | null>(null);
+  const lastPinchEndRef = useRef(0);
+
   const layout = useMemo(
     () => buildGraphLayout(analysis, folder, kind, includePackages),
     [analysis, folder, kind, includePackages],
@@ -590,6 +595,8 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     setMapSelectedId(null);
     setDragNodeId(null);
     nodeDragRef.current = null;
+    activePointersRef.current.clear();
+    pinchRef.current = null;
   }, [layout]);
 
   /* ----- camera helpers ---------------------------------------------- */
@@ -687,10 +694,24 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     requestAnimationFrame(fitView);
   };
 
-  /* ----- canvas panning ------------------------------------------------ */
+  /* ----- canvas panning & pinch-to-zoom -------------------------------- */
 
   const handleCanvasPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // Second finger down → switch from pan to pinch.
+    if (activePointersRef.current.size === 2) {
+      const [a, b] = [...activePointersRef.current.values()];
+      pinchRef.current = {
+        startDist: Math.hypot(a.x - b.x, a.y - b.y),
+        startK: viewRef.current.k,
+      };
+      panRef.current = null;
+      setPanning(false);
+      return;
+    }
+
     panRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -702,6 +723,36 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
   };
 
   const handleCanvasPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, {
+        x: e.clientX,
+        y: e.clientY,
+      });
+    }
+
+    // Pinch zoom anchored at the midpoint between the two fingers.
+    const pinch = pinchRef.current;
+    if (pinch && activePointersRef.current.size >= 2) {
+      const [a, b] = [...activePointersRef.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      const el = svgRef.current;
+      if (dist > 0 && pinch.startDist > 0 && el) {
+        const rect = el.getBoundingClientRect();
+        const px = (a.x + b.x) / 2 - rect.left;
+        const py = (a.y + b.y) / 2 - rect.top;
+        const k2 = clampK(pinch.startK * (dist / pinch.startDist));
+        setView((v) => {
+          const scale = k2 / v.k;
+          return {
+            k: k2,
+            x: px - (px - v.x) * scale,
+            y: py - (py - v.y) * scale,
+          };
+        });
+      }
+      return;
+    }
+
     const d = panRef.current;
     if (!d) return;
     const dx = e.clientX - d.startX;
@@ -715,7 +766,19 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     setPanning(false);
   };
 
+  const releasePointer = (e: React.PointerEvent<SVGSVGElement>) => {
+    const wasPinching = pinchRef.current !== null;
+    activePointersRef.current.delete(e.pointerId);
+    if (activePointersRef.current.size < 2) {
+      pinchRef.current = null;
+      if (wasPinching) lastPinchEndRef.current = Date.now();
+    }
+    if (activePointersRef.current.size === 0) endPan();
+  };
+
   const handleCanvasClick = () => {
+    // Ignore the synthetic click fired right after a pinch gesture ends.
+    if (Date.now() - lastPinchEndRef.current < 350) return;
     if (!panRef.current?.moved) setMapSelectedId(null);
   };
 
@@ -841,7 +904,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
       {/* Map toolbar */}
       <div className="flex flex-wrap items-center gap-2 pb-3">
         <div className="flex items-center gap-1.5 text-xs text-slate-300 font-semibold">
-          <MapIcon className="w-4 h-4 text-info" />
+          <MapIcon className="w-4 h-4 text-slate-400" />
           <span>Codebase Map</span>
           <span className="text-[10px] font-mono text-slate-500">
             {layout.nodes.length} nodes • {layout.edges.length} edges
@@ -900,7 +963,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
             onClick={() => setFlowPaused((p) => !p)}
             className={`p-1.5 rounded-lg border transition-colors ${
               flowPaused
-                ? "bg-purple-600/15 border-purple-500/40 text-purple-300"
+                ? "chip-accent"
                 : "surface-raised border-chrome text-slate-300 hover:text-white"
             }`}
             title={
@@ -977,8 +1040,9 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
             }${flowPaused ? " dlc-flow-paused" : ""}`}
             onPointerDown={handleCanvasPointerDown}
             onPointerMove={handleCanvasPointerMove}
-            onPointerUp={endPan}
-            onPointerLeave={endPan}
+            onPointerUp={releasePointer}
+            onPointerCancel={releasePointer}
+            onPointerLeave={releasePointer}
             onClick={handleCanvasClick}
             role="img"
             aria-label="Codebase dependency map"
@@ -1087,10 +1151,10 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
               <span className="dlc-legend-port" />
               dots flow caller → callee
             </span>
-            <span className="text-slate-600">|</span>
-            <span>
-              drag nodes to rearrange • scroll to zoom • click to trace •
-              double-click to focus
+            <span className="text-slate-600 hidden md:inline">|</span>
+            <span className="hidden md:inline">
+              drag nodes to rearrange • pinch / scroll to zoom • click to trace
+              • double-click to focus
             </span>
           </div>
         )}

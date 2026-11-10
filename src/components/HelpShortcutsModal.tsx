@@ -1,4 +1,3 @@
-
 import React from "react";
 import {
   X,
@@ -39,12 +38,12 @@ export const HelpShortcutsModal: React.FC<HelpShortcutsModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl surface-card border border-chrome rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+        className="w-full max-w-2xl surface-card border border-chrome rounded-2xl shadow-2xl overflow-hidden max-h-[90dvh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-subtle surface-raised shrink-0">
           <div className="flex items-center space-x-2.5">
-            <div className="p-1.5 rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/25">
+            <div className="p-1.5 rounded-lg icon-chip border">
               <BookOpen className="w-4 h-4" />
             </div>
             <h3 className="font-semibold text-slate-100 text-sm">
@@ -118,8 +117,9 @@ export const HelpShortcutsModal: React.FC<HelpShortcutsModalProps> = ({
                   <span>DepLenz</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Function dependency trees, keyword search with enclosing symbols,
-                  and surgical context prompt extraction with syntax diagnostics.
+                  Function dependency trees, keyword search with enclosing
+                  symbols, and surgical context prompt extraction with syntax
+                  diagnostics.
                 </p>
               </div>
             </div>
@@ -160,4 +160,3 @@ export const HelpShortcutsModal: React.FC<HelpShortcutsModalProps> = ({
     </div>
   );
 };
-

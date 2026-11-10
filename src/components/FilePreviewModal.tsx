@@ -1,4 +1,3 @@
-
 import React from "react";
 import {
   X,
@@ -53,17 +52,17 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl surface-card border border-chrome rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+        className="w-full max-w-3xl surface-card border border-chrome rounded-2xl shadow-2xl flex flex-col max-h-[85dvh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-subtle surface-raised">
           <div className="flex items-center space-x-3 min-w-0">
-            <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/25 shrink-0">
+            <div className="p-2 rounded-xl icon-chip border shrink-0">
               {category === "image" ? (
                 <FileImage className="w-5 h-5" />
               ) : category === "code" ? (
@@ -93,7 +92,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
               >
                 {copied ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <Check className="w-3.5 h-3.5 text-ok" />
                     <span>Copied</span>
                   </>
                 ) : (
@@ -108,7 +107,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             <button
               type="button"
               onClick={handleDownload}
-              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors shadow-sm"
+              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors shadow-sm"
               title="Download this file"
             >
               <Download className="w-3.5 h-3.5" />
@@ -189,4 +188,3 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     </div>
   );
 };
-

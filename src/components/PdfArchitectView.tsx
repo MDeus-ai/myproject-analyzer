@@ -1,4 +1,3 @@
-
 import React, {
   useState,
   useEffect,
@@ -48,7 +47,7 @@ const PDF_REGEN_DEBOUNCE_MS = 350;
 
 /** Sheet-view equivalents of the PDF font choices (fonts available in the app). */
 const SHEET_FONT_MAP: Record<PdfTreeFont, string> = {
-  mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+  mono: "var(--font-mono)",
   sans: "var(--font-sans)",
   serif: 'Georgia, "Times New Roman", Times, serif',
 };
@@ -205,44 +204,22 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
     return flattenDirectoryInventory(rootNode);
   }, [rootNode]);
 
+  /** Accent colors for the PDF document itself (rendered on the protected
+   *  white sheet, so they stay document accents — not UI chrome). */
   const themeColors = {
-    blue: {
-      bg: "bg-blue-600",
-      border: "border-blue-500",
-      text: "text-blue-600",
-      pill: "bg-blue-50 text-blue-700",
-      headerBg: "#2563eb",
-    },
-    indigo: {
-      bg: "bg-indigo-600",
-      border: "border-indigo-500",
-      text: "text-indigo-600",
-      pill: "bg-indigo-50 text-indigo-700",
-      headerBg: "#4f46e5",
-    },
-    emerald: {
-      bg: "bg-emerald-600",
-      border: "border-emerald-500",
-      text: "text-emerald-600",
-      pill: "bg-emerald-50 text-emerald-700",
-      headerBg: "#059669",
-    },
-    amber: {
-      bg: "bg-amber-600",
-      border: "border-amber-500",
-      text: "text-amber-600",
-      pill: "bg-amber-50 text-amber-700",
-      headerBg: "#d97706",
-    },
+    blue: { headerBg: "#2563eb" },
+    indigo: { headerBg: "#4f46e5" },
+    emerald: { headerBg: "#059669" },
+    amber: { headerBg: "#d97706" },
   }[pdfOptions.themeColor];
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-950 text-slate-100 overflow-hidden">
+    <div className="flex flex-col lg:flex-row h-full bg-[var(--app-bg)] text-slate-100 overflow-hidden">
       {/* Settings / Configuration Sidebar */}
-      <div className="w-full lg:w-96 bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-800 flex flex-col shrink-0">
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+      <div className="w-full lg:w-96 max-h-[55dvh] lg:max-h-none surface-card border-b lg:border-b-0 lg:border-r border-chrome flex flex-col shrink-0">
+        <div className="p-4 sm:p-5 border-b border-subtle flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className="p-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
+            <div className="p-1.5 rounded-lg icon-chip border">
               <Settings2 className="w-4 h-4" />
             </div>
             <div>
@@ -259,7 +236,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
             type="button"
             onClick={refreshPdf}
             disabled={isGenerating}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[var(--surface-hover)] transition-colors"
             title="Refresh preview"
           >
             <RefreshCw
@@ -281,15 +258,15 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               onChange={(e) =>
                 setPdfOptions((prev) => ({ ...prev, title: e.target.value }))
               }
-              className="w-full px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800 text-slate-200 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-1.5 surface-inset rounded-xl border border-subtle text-slate-200 focus:outline-none focus:border-purple-500"
             />
           </div>
 
           {/* Theme Palette */}
           <div>
             <label className="block text-slate-300 font-medium mb-2 flex items-center space-x-1.5">
-              <Palette className="w-3.5 h-3.5 text-blue-400" />
-              <span>Theme Accent Color</span>
+              <Palette className="w-3.5 h-3.5 text-slate-400" />
+              <span>Document Accent Color</span>
             </label>
             <div className="grid grid-cols-4 gap-2">
               {[
@@ -310,7 +287,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                   className={`flex items-center space-x-1.5 p-2 rounded-xl border transition-all ${
                     pdfOptions.themeColor === th.id
                       ? "chip-accent shadow-sm"
-                      : "border-slate-800 bg-slate-950/60 hover:bg-slate-800"
+                      : "border-subtle surface-inset hover:bg-[var(--surface-hover)]"
                   }`}
                 >
                   <span
@@ -325,9 +302,9 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
           </div>
 
           {/* Typography */}
-          <div className="space-y-3 pt-2 border-t border-slate-800">
+          <div className="space-y-3 pt-2 border-t border-subtle">
             <span className="block text-slate-400 font-semibold text-[11px] uppercase tracking-wider flex items-center space-x-1.5">
-              <Type className="w-3.5 h-3.5 text-cyan-400" />
+              <Type className="w-3.5 h-3.5 text-slate-400" />
               <span>Tree Typography</span>
             </span>
 
@@ -344,7 +321,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                   className={`p-2 rounded-xl border text-center transition-all ${
                     pdfOptions.treeFont === font.id
                       ? "chip-accent font-semibold"
-                      : "border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200"
+                      : "border-subtle surface-inset text-slate-400 hover:text-slate-200"
                   }`}
                 >
                   <span
@@ -379,7 +356,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                   }))
                 }
                 aria-label="Tree font size in points"
-                className="w-full h-1.5 rounded-full bg-slate-800 slider-accent cursor-pointer"
+                className="w-full h-1.5 rounded-full bg-[var(--surface-raised)] slider-accent cursor-pointer"
               />
               <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1 font-mono">
                 <span>7 pt</span>
@@ -389,12 +366,12 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
           </div>
 
           {/* Section Toggles */}
-          <div className="space-y-3 pt-2 border-t border-slate-800">
+          <div className="space-y-3 pt-2 border-t border-subtle">
             <span className="block text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
               Sections to Include
             </span>
 
-            <label className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 cursor-pointer hover:bg-slate-800/50">
+            <label className="flex items-center justify-between p-2.5 rounded-xl surface-inset border border-subtle cursor-pointer hover:bg-[var(--surface-hover)]">
               <div>
                 <span className="block font-medium text-slate-200">
                   Folder Summary Cards
@@ -412,11 +389,11 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                     includeStats: e.target.checked,
                   }))
                 }
-                className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-0 cursor-pointer"
+                className="w-4 h-4 rounded border-slate-700 bg-transparent text-purple-500 focus:ring-0 cursor-pointer"
               />
             </label>
 
-            <label className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 cursor-pointer hover:bg-slate-800/50">
+            <label className="flex items-center justify-between p-2.5 rounded-xl surface-inset border border-subtle cursor-pointer hover:bg-[var(--surface-hover)]">
               <div>
                 <span className="block font-medium text-slate-200">
                   Visual Hierarchy Tree
@@ -434,11 +411,11 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                     includeTree: e.target.checked,
                   }))
                 }
-                className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-0 cursor-pointer"
+                className="w-4 h-4 rounded border-slate-700 bg-transparent text-purple-500 focus:ring-0 cursor-pointer"
               />
             </label>
 
-            <label className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 cursor-pointer hover:bg-slate-800/50">
+            <label className="flex items-center justify-between p-2.5 rounded-xl surface-inset border border-subtle cursor-pointer hover:bg-[var(--surface-hover)]">
               <div>
                 <span className="block font-medium text-slate-200">
                   Complete File Inventory Table
@@ -456,18 +433,18 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                     includeInventoryTable: e.target.checked,
                   }))
                 }
-                className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-0 cursor-pointer"
+                className="w-4 h-4 rounded border-slate-700 bg-transparent text-purple-500 focus:ring-0 cursor-pointer"
               />
             </label>
           </div>
 
           {/* Details Options */}
-          <div className="space-y-3 pt-2 border-t border-slate-800">
+          <div className="space-y-3 pt-2 border-t border-subtle">
             <span className="block text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
               Data Columns
             </span>
 
-            <label className="flex items-center justify-between p-2 rounded-xl bg-slate-950/40 border border-slate-800/60 cursor-pointer">
+            <label className="flex items-center justify-between p-2 rounded-xl surface-inset border border-subtle cursor-pointer">
               <span className="text-slate-300">Show File Sizes</span>
               <input
                 type="checkbox"
@@ -478,11 +455,11 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                     includeSizes: e.target.checked,
                   }))
                 }
-                className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-0 cursor-pointer"
+                className="w-4 h-4 rounded border-slate-700 bg-transparent text-purple-500 focus:ring-0 cursor-pointer"
               />
             </label>
 
-            <label className="flex items-center justify-between p-2 rounded-xl bg-slate-950/40 border border-slate-800/60 cursor-pointer">
+            <label className="flex items-center justify-between p-2 rounded-xl surface-inset border border-subtle cursor-pointer">
               <span className="text-slate-300">Show Modification Dates</span>
               <input
                 type="checkbox"
@@ -493,13 +470,13 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                     includeDates: e.target.checked,
                   }))
                 }
-                className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-0 cursor-pointer"
+                className="w-4 h-4 rounded border-slate-700 bg-transparent text-purple-500 focus:ring-0 cursor-pointer"
               />
             </label>
           </div>
 
           {/* Tree Style */}
-          <div className="pt-2 border-t border-slate-800">
+          <div className="pt-2 border-t border-subtle">
             <label className="block text-slate-300 font-medium mb-1.5">
               Tree Row Density
             </label>
@@ -512,7 +489,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                 className={`p-2 rounded-xl border text-center transition-all ${
                   pdfOptions.treeStyle === "standard"
                     ? "chip-accent font-semibold"
-                    : "border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200"
+                    : "border-subtle surface-inset text-slate-400 hover:text-slate-200"
                 }`}
               >
                 Standard
@@ -525,7 +502,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                 className={`p-2 rounded-xl border text-center transition-all ${
                   pdfOptions.treeStyle === "compact"
                     ? "chip-accent font-semibold"
-                    : "border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200"
+                    : "border-subtle surface-inset text-slate-400 hover:text-slate-200"
                 }`}
               >
                 Compact
@@ -535,12 +512,12 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
         </div>
 
         {/* Action Buttons in sidebar */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/90 space-y-2">
+        <div className="p-4 border-t border-subtle surface-card space-y-2">
           <button
             type="button"
             onClick={() => handleDownloadImage("png")}
             disabled={isExportingImage}
-            className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition-all shadow-md shadow-indigo-600/30 active:scale-98 disabled:opacity-50"
+            className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome font-medium text-xs transition-all active:scale-98 disabled:opacity-50"
           >
             <ImageIcon className="w-4 h-4" />
             <span>
@@ -553,7 +530,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
           <button
             type="button"
             onClick={handleDownloadPdf}
-            className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all shadow-md shadow-emerald-600/30 active:scale-98"
+            className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition-all active:scale-98"
           >
             <Download className="w-4 h-4" />
             <span>Download PDF Document</span>
@@ -562,25 +539,25 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
       </div>
 
       {/* Main Preview Area */}
-      <div className="flex-1 flex flex-col bg-slate-950 overflow-hidden">
+      <div className="flex-1 flex flex-col bg-[var(--app-bg)] overflow-hidden">
         {/* Preview Toolbar */}
-        <div className="px-6 py-3 border-b border-slate-800 flex flex-wrap gap-2 items-center justify-between bg-slate-900/60">
+        <div className="px-6 py-3 border-b border-subtle flex flex-wrap gap-2 items-center justify-between surface-header">
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2">
-              <Eye className="w-4 h-4 text-emerald-400" />
+              <Eye className="w-4 h-4 text-slate-400" />
               <span className="text-xs font-semibold text-slate-200">
                 Structure Document Preview
               </span>
             </div>
 
             {/* Mode Switcher */}
-            <div className="flex items-center bg-slate-950 rounded-lg p-0.5 border border-slate-800 text-xs">
+            <div className="flex items-center surface-inset rounded-lg p-0.5 border border-subtle text-xs">
               <button
                 type="button"
                 onClick={() => setPreviewMode("sheet")}
                 className={`px-2.5 py-1 rounded-md font-medium transition-all ${
                   previewMode === "sheet"
-                    ? "bg-slate-800 text-slate-100 shadow-sm"
+                    ? "surface-raised text-slate-100 shadow-sm"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -591,7 +568,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                 onClick={() => setPreviewMode("native")}
                 className={`px-2.5 py-1 rounded-md font-medium transition-all ${
                   previewMode === "native"
-                    ? "bg-slate-800 text-slate-100 shadow-sm"
+                    ? "surface-raised text-slate-100 shadow-sm"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -601,7 +578,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
 
             {/* PDF metadata pill */}
             {previewMode === "native" && pdfMeta && (
-              <span className="hidden md:inline-flex items-center space-x-1.5 text-[10px] font-mono text-slate-400 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800">
+              <span className="hidden md:inline-flex items-center space-x-1.5 text-[10px] font-mono text-slate-400 px-2.5 py-1 rounded-lg surface-inset border border-subtle">
                 <span>
                   {pdfMeta.pages} page{pdfMeta.pages !== 1 ? "s" : ""}
                 </span>
@@ -615,7 +592,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
 
           <div className="flex items-center space-x-2">
             {/* Zoom controls — sheet scales via CSS, PDF viewer re-renders canvases */}
-            <div className="flex items-center space-x-1 bg-slate-850 px-2 py-1 rounded-lg border border-slate-800 text-xs">
+            <div className="flex items-center space-x-1 surface-raised px-2 py-1 rounded-lg border border-chrome text-xs">
               <button
                 type="button"
                 onClick={zoomOut}
@@ -651,7 +628,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                 onClick={handleOpenExternal}
                 disabled={!previewUrl}
                 aria-label="Open PDF in new tab"
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors disabled:opacity-40"
+                className="p-1.5 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-300 border border-chrome transition-colors disabled:opacity-40"
                 title="Open the generated PDF in a new browser tab"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -664,7 +641,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               onClick={() => handleDownloadImage("png")}
               disabled={isExportingImage}
               aria-label="Download image version"
-              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-sm transition-all active:scale-95 disabled:opacity-50"
+              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome font-medium transition-all active:scale-95 disabled:opacity-50"
               title="Download structure report as high-resolution PNG image"
             >
               <ImageIcon className="w-3.5 h-3.5" />
@@ -678,7 +655,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
               type="button"
               onClick={handleDownloadPdf}
               aria-label="Download PDF document"
-              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-sm transition-all active:scale-95"
+              className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium shadow-sm transition-all active:scale-95"
               title="Download directory structure as vector PDF"
             >
               <Download className="w-3.5 h-3.5" />
@@ -689,7 +666,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
 
         {/* Preview Container */}
         <div
-          className={`flex-1 p-4 sm:p-6 bg-slate-950 ${
+          className={`flex-1 p-4 sm:p-6 bg-[var(--app-bg)] ${
             previewMode === "sheet"
               ? "overflow-y-auto flex justify-center items-start"
               : "overflow-hidden flex"
@@ -722,7 +699,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
 
               {/* Summary Stats Row */}
               {pdfOptions.includeStats && (
-                <div className="grid grid-cols-4 gap-3 mb-8">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
                     <span className="block text-base sm:text-lg font-bold font-mono text-slate-800">
                       {stats.totalFiles.toLocaleString()}
@@ -788,8 +765,8 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                   <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200">
                     Complete File Inventory
                   </h3>
-                  <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-                    <table className="w-full text-left text-xs">
+                  <div className="border border-slate-200 rounded-lg overflow-hidden overflow-x-auto shadow-sm">
+                    <table className="w-full text-left text-xs min-w-[540px]">
                       <thead
                         style={{ backgroundColor: themeColors.headerBg }}
                         className="text-white font-semibold"
@@ -853,7 +830,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
           ) : (
             /* PDF.js canvas viewer — the real generated document, fully zoomable,
                with zero native-viewer chrome (no gray side rails/scrollbars) */
-            <div className="relative flex-1 w-full max-w-5xl mx-auto rounded-2xl overflow-hidden border border-slate-800 shadow-2xl bg-slate-900/40">
+            <div className="relative flex-1 w-full max-w-5xl mx-auto rounded-2xl overflow-hidden border border-chrome shadow-2xl surface-card">
               <PdfCanvasViewer
                 data={pdfData}
                 zoom={zoomLevel}
@@ -866,4 +843,3 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
     </div>
   );
 };
-

@@ -1,47 +1,71 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------ */
+/* Type system — IBM Plex                                              */
+/* Tailwind v4: --font-* entries inside @theme are emitted as :root    */
+/* custom properties AND generate the font-sans / font-display /       */
+/* font-mono utilities. body text = IBM Plex Sans, headings = IBM      */
+/* Plex Sans Condensed, code = IBM Plex Mono.                          */
+/* ------------------------------------------------------------------ */
+
+/* Dark-mode canvas is ALWAYS pure black — themes re-tint accents only,
+   never the background. Overrides the inline --app-bg tint applied by
+   themes.ts (the source of the reddish cast). */
+:root:not([data-appearance="light"]) {
+  --app-bg: #000000 !important;
+}
+
+@theme {
+  --font-sans:
+    "IBM Plex Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display:
+    "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono:
+    "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+}
+
 @layer base {
   :root {
-    --font-sans:
-      "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-      sans-serif;
-    --font-mono:
-      "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-      monospace;
     color-scheme: dark;
 
-    /* Neutral dark chrome (themes only tint --app-bg, never the surfaces) */
-    --app-bg: #0e1013;
-    --surface-header: #12151a;
-    --surface-card: #161a20;
-    --surface-raised: #1c2129;
-    --surface-raised-hover: #242b35;
-    --surface-inset: #10141a;
-    --surface-hover: #1d232c;
-    --surface-section: #0b0e12;
-    --border-chrome: #262d38;
-    --border-subtle: #1f252e;
+    /* True-black layered chrome. Hierarchy (darkest → lightest):
+       app bg < section < inset/header < card < raised < hover.
+       Pure neutrals — zero hue, so the single accent color carries
+       all the identity. */
+    --app-bg: #000000;
+    --surface-section: #050505;
+    --surface-header: #0a0a0a;
+    --surface-inset: #0a0a0a;
+    --surface-card: #101010;
+    --surface-raised: #161616;
+    --surface-raised-hover: #1e1e1e;
+    --surface-hover: #1a1a1a;
+    --border-chrome: #222222;
+    --border-subtle: #181818;
   }
 
   /* ------------------------------------------------------------------ */
   /* LIGHT MODE                                                          */
   /* Activated via <html data-appearance="light">. Inverting the slate  */
   /* scale flips every bg-slate-*, text-slate-* and border-slate-*      */
-  /* utility in the app automatically.                                  */
+  /* utility in the app automatically. Neutral grays — no blue cast.    */
   /* ------------------------------------------------------------------ */
   :root[data-appearance="light"] {
     color-scheme: light;
 
-    --app-bg: #eef1f6;
+    --app-bg: #f4f4f5;
     --surface-header: #ffffff;
     --surface-card: #ffffff;
-    --surface-raised: #f1f5f9;
-    --surface-raised-hover: #e6ebf2;
-    --surface-inset: #f1f5f9;
-    --surface-hover: #edf1f7;
-    --surface-section: #e7ebf2;
-    --border-chrome: #dce2ec;
-    --border-subtle: #e3e8f0;
+    --surface-raised: #f4f4f5;
+    --surface-raised-hover: #e9e9ec;
+    --surface-inset: #f4f4f5;
+    --surface-hover: #ececef;
+    --surface-section: #ebebef;
+    --border-chrome: #dcdce0;
+    --border-subtle: #e4e4e8;
 
     --color-slate-50: #020617;
     --color-slate-100: #0f172a;
@@ -83,6 +107,17 @@
     overflow-x: hidden;
     transition: background-color 300ms ease;
   }
+
+  /* Display face: every heading uses IBM Plex Sans Condensed.
+     Opt any individual heading back out with class="font-sans". */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -115,6 +150,21 @@
   border-color: var(--border-subtle);
 }
 
+/* ------------------------------------------------------------------ */
+/* Code wells — terminal-style blocks (signatures, source previews,    */
+/* prompt output). Near-black in dark mode, GitHub-style light gray    */
+/* in light mode. Replaces hardcoded bg-black/40–60, which rendered    */
+/* as unreadable gray sludge in light mode.                            */
+/* ------------------------------------------------------------------ */
+.code-well {
+  background-color: #050505;
+  border-color: var(--border-subtle);
+}
+:root[data-appearance="light"] .code-well {
+  background-color: #f6f8fa;
+  border-color: #d0d7de;
+}
+
 /* Hide scrollbars on horizontally scrollable nav strips (links remain
    scrollable via drag/trackpad; the visual scrollbar is suppressed). */
 .scrollbar-none {
@@ -125,32 +175,42 @@
   display: none; /* WebKit */
 }
 
-/* Hero headline gradient: always tone-on-tone because every theme maps the
-   purple and violet scales to the same hue family. */
-.hero-title-gradient {
-  background-image: linear-gradient(
+/* Soft fade on the edges of horizontally scrollable strips so clipped
+   items read as "scroll for more" instead of a hard cut. */
+.scroll-fade-x {
+  -webkit-mask-image: linear-gradient(
     to right,
-    var(--color-purple-300),
-    var(--color-violet-400)
+    transparent,
+    black 20px,
+    black calc(100% - 20px),
+    transparent
   );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-:root[data-appearance="light"] .hero-title-gradient {
-  background-image: linear-gradient(
+  mask-image: linear-gradient(
     to right,
-    var(--color-purple-600),
-    var(--color-violet-600)
+    transparent,
+    black 20px,
+    black calc(100% - 20px),
+    transparent
   );
 }
 
-/* Decorative hero glow - heavily softened in light mode */
+/* Solid headline — no rainbow gradient. */
+.hero-title-gradient {
+  color: var(--color-slate-50);
+}
+:root[data-appearance="light"] .hero-title-gradient {
+  color: var(--color-slate-900);
+}
+
+/* Neutral ambience — a soft white haze, not a purple party.
+   (Unlayered CSS, so this wins over any leftover color utility on the
+   element; the `background` shorthand also resets background-color.) */
 .hero-glow {
-  opacity: 0.5;
+  opacity: 0.06;
+  background: radial-gradient(ellipse at center, #ffffff 0%, transparent 70%);
 }
 :root[data-appearance="light"] .hero-glow {
-  opacity: 0.18;
+  opacity: 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -267,7 +327,7 @@ input[type="range"].slider-accent {
   accent-color: var(--color-purple-600);
 }
 
-/* Custom sleek scrollbar for desktop app feel */
+/* Custom sleek scrollbar for desktop app feel (neutral — no blue cast) */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -278,12 +338,12 @@ input[type="range"].slider-accent {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.25);
+  background: rgba(128, 128, 128, 0.28);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.45);
+  background: rgba(128, 128, 128, 0.48);
 }
 
 /* ------------------------------------------------------------------ */
@@ -323,7 +383,7 @@ input[type="range"].slider-accent {
   cursor: grabbing;
 }
 .dlc-node-shadow {
-  fill: rgba(2, 6, 23, 0.55);
+  fill: rgba(0, 0, 0, 0.65);
 }
 :root[data-appearance="light"] .dlc-node-shadow {
   fill: rgba(15, 23, 42, 0.12);
@@ -530,4 +590,171 @@ input[type="range"].slider-accent {
   border-radius: 9999px;
   display: inline-block;
   background: #64748b;
+}
+
+/* ------------------------------------------------------------------ */
+/* Mobile & small-screen hardening                                     */
+/* ------------------------------------------------------------------ */
+
+/* 100dvh tracks the *visible* viewport on mobile browsers, so the app
+   shell is never clipped behind the URL bar. */
+@supports (height: 100dvh) {
+  body {
+    min-height: 100dvh;
+  }
+}
+
+/* The desktop chrome disables text selection globally; restore it inside
+   inputs and code/preview blocks so copy-paste works on touch devices. */
+input,
+textarea,
+pre,
+code,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Removes the 300ms tap delay / double-tap-zoom jank on controls
+   (the SVG graph canvas keeps touch-action:none via its .touch-none
+   class so pan/pinch keep working there). */
+button,
+[role="button"],
+a,
+select,
+label {
+  touch-action: manipulation;
+}
+
+/* iOS Safari auto-zooms the page when an input with font-size < 16px
+   receives focus. Bump control text size on touch devices only. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  /* Larger scrollbars are easier to grab with a finger. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+/* Respect reduced-motion: stop the animated graph edge dots. */
+@media (prefers-reduced-motion: reduce) {
+  .dlc-edge-flow,
+  .dlc-edge-flow-soft {
+    animation: none;
+  }
+}
+
+/* ================================================================== */
+/* SEMANTIC COLOR SYSTEM                                               */
+/* NEUTRAL (surfaces, icon-chip) · ACCENT (theme palette) ·            */
+/* FUNCTIONAL (warn/ok/info/danger) · CATEGORICAL (DepLenz kinds)      */
+/* ================================================================== */
+
+/* --- Neutral decorative icon chip — replaces every colored
+       bg-X-500/15 text-X-400 border-X-500/25 header/feature chip. ---- */
+.icon-chip {
+  background-color: var(--surface-raised);
+  border-color: var(--border-chrome);
+  color: var(--color-slate-400);
+}
+
+/* --- Accent surfaces: selected rows, active states ------------------ */
+.bg-accent-soft {
+  background-color: color-mix(
+    in srgb,
+    var(--color-purple-500) 12%,
+    transparent
+  );
+}
+.border-accent {
+  border-color: color-mix(in srgb, var(--color-purple-500) 40%, transparent);
+}
+
+/* --- Functional info surfaces --------------------------------------- */
+:root {
+  --info-soft-bg: rgba(34, 211, 238, 0.1);
+  --info-border: rgba(34, 211, 238, 0.32);
+}
+:root[data-appearance="light"] {
+  --info-soft-bg: rgba(14, 116, 144, 0.08);
+  --info-border: rgba(14, 116, 144, 0.32);
+}
+.bg-info-soft {
+  background-color: var(--info-soft-bg);
+}
+.border-info {
+  border-color: var(--info-border);
+}
+
+/* --- Functional danger surfaces ------------------------------------- */
+:root {
+  --danger-soft-bg: rgba(251, 113, 133, 0.1);
+  --danger-border: rgba(251, 113, 133, 0.32);
+}
+:root[data-appearance="light"] {
+  --danger-soft-bg: rgba(190, 18, 60, 0.07);
+  --danger-border: rgba(190, 18, 60, 0.32);
+}
+.bg-danger-soft {
+  background-color: var(--danger-soft-bg);
+}
+.border-danger {
+  border-color: var(--danger-border);
+}
+
+/* --- DepLenz kind badges — share the SAME adaptive accent variable   */
+/* the graph nodes use, so a badge always matches its map node.        */
+.kind-badge {
+  --dlc-accent: #94a3b8;
+  background-color: color-mix(in srgb, var(--dlc-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--dlc-accent) 42%, transparent);
+  color: var(--dlc-accent);
+}
+:root[data-appearance="light"] .kind-badge {
+  --dlc-accent: #475569;
+}
+.kind-component {
+  --dlc-accent: #c084fc;
+}
+.kind-function {
+  --dlc-accent: #38bdf8;
+}
+.kind-hook {
+  --dlc-accent: #34d399;
+}
+.kind-class {
+  --dlc-accent: #fbbf24;
+}
+.kind-method {
+  --dlc-accent: #f472b6;
+}
+:root[data-appearance="light"] .kind-component {
+  --dlc-accent: #7c3aed;
+}
+:root[data-appearance="light"] .kind-function {
+  --dlc-accent: #0284c7;
+}
+:root[data-appearance="light"] .kind-hook {
+  --dlc-accent: #059669;
+}
+:root[data-appearance="light"] .kind-class {
+  --dlc-accent: #b45309;
+}
+:root[data-appearance="light"] .kind-method {
+  --dlc-accent: #be185d;
+}
+
+/* --- Homepage graph mock: kind-colored SVG (adapts via kind class) -- */
+.mock-accent {
+  fill: var(--dlc-accent, #94a3b8);
+}
+.mock-chip {
+  fill: color-mix(in srgb, var(--dlc-accent) 16%, transparent);
+  stroke: color-mix(in srgb, var(--dlc-accent) 45%, transparent);
 }

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from "react";
 import {
   Search,
@@ -122,16 +121,16 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
     const cat = getFileCategory(file.name, file.type);
     switch (cat) {
       case "code":
-        return <FileCode className="w-4 h-4 text-sky-400" />;
+        return <FileCode className="w-4 h-4 text-slate-400" />;
       case "image":
-        return <FileImage className="w-4 h-4 text-emerald-400" />;
+        return <FileImage className="w-4 h-4 text-slate-400" />;
       case "document":
-        return <FileTextIcon className="w-4 h-4 text-blue-400" />;
+        return <FileTextIcon className="w-4 h-4 text-slate-400" />;
       case "audio":
       case "video":
-        return <FileAudio className="w-4 h-4 text-purple-400" />;
+        return <FileAudio className="w-4 h-4 text-slate-400" />;
       case "data":
-        return <FileSpreadsheet className="w-4 h-4 text-amber-400" />;
+        return <FileSpreadsheet className="w-4 h-4 text-slate-400" />;
       default:
         return <File className="w-4 h-4 text-slate-400" />;
     }
@@ -143,7 +142,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
       <div className="surface-header border-b border-chrome px-4 sm:px-5 py-2 flex flex-wrap items-center gap-x-3 gap-y-2">
         {/* Title group */}
         <div className="flex items-center space-x-2.5 mr-2">
-          <div className="p-1.5 rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/25">
+          <div className="p-1.5 rounded-lg icon-chip border">
             <FolderMinus className="w-4 h-4" />
           </div>
           <div className="leading-tight">
@@ -155,8 +154,8 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                 {files.length}
               </span>
               {collisionCount > 0 && (
-                <span className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 text-[10px] font-medium border border-amber-500/30">
-                  <AlertTriangle className="w-3 h-3 text-amber-400" />
+                <span className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-warn-soft text-warn text-[10px] font-medium border border-warn">
+                  <AlertTriangle className="w-3 h-3 text-warn" />
                   <span>
                     {collisionCount} collision{collisionCount > 1 ? "s" : ""}{" "}
                     resolved
@@ -183,7 +182,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
         </div>
 
         {/* Category pills */}
-        <div className="flex items-center space-x-1 overflow-x-auto text-xs">
+        <div className="flex items-center space-x-1 overflow-x-auto scrollbar-none text-xs">
           {[
             { id: "all", label: "All" },
             { id: "code", label: "Code" },
@@ -241,7 +240,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
               onClick={() =>
                 setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
               }
-              className="px-1 text-purple-400 hover:text-purple-300 font-mono font-bold cursor-pointer"
+              className="px-1 text-accent hover:opacity-80 font-mono font-bold cursor-pointer"
               title="Toggle sort direction"
             >
               {sortOrder === "asc" ? "↑" : "↓"}
@@ -262,14 +261,14 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
 
       {/* Zipping Progress Bar (only while zipping) */}
       {isZipping && zipProgress && (
-        <div className="bg-purple-500/10 border-b border-purple-500/25 px-6 py-2 flex items-center space-x-4">
+        <div className="bg-accent-soft border-b border-accent px-6 py-2 flex items-center space-x-4">
           <div className="flex-1 surface-inset h-1.5 rounded-full overflow-hidden border border-subtle">
             <div
               className="bg-purple-500 h-full transition-all duration-200 rounded-full"
               style={{ width: `${zipProgress.percent}%` }}
             />
           </div>
-          <span className="text-xs text-purple-300 font-mono whitespace-nowrap">
+          <span className="text-xs text-accent font-mono whitespace-nowrap">
             {zipProgress.percent}% • {zipProgress.currentFile}
           </span>
         </div>
@@ -311,7 +310,9 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                     <th className="py-3 px-4">Original Nested Path</th>
                     <th className="py-3 px-3">Type / Ext</th>
                     <th className="py-3 px-3 text-right">Size</th>
-                    <th className="py-3 px-4">Last Modified</th>
+                    <th className="py-3 px-4 hidden md:table-cell">
+                      Last Modified
+                    </th>
                     <th className="py-3 px-3 text-center">Actions</th>
                   </tr>
                 </thead>
@@ -324,7 +325,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                       <tr
                         key={file.id}
                         className={`transition-colors hover:bg-[var(--surface-hover)] ${
-                          isSelected ? "bg-purple-500/10" : ""
+                          isSelected ? "bg-accent-soft" : ""
                         }`}
                       >
                         <td className="py-2.5 px-3 text-center">
@@ -343,14 +344,14 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                               {getCategoryIcon(file)}
                             </span>
                             <span
-                              className={`truncate max-w-xs ${isRenamed ? "text-purple-300 font-semibold" : ""}`}
+                              className={`truncate max-w-xs ${isRenamed ? "text-accent font-semibold" : ""}`}
                               title={file.flattenedName}
                             >
                               {file.flattenedName}
                             </span>
                             {isRenamed && (
                               <span
-                                className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 font-sans border border-amber-500/30 font-medium"
+                                className="text-[10px] px-1.5 py-0.5 rounded-full bg-warn-soft text-warn font-sans border border-warn font-medium"
                                 title={`Original was: ${file.originalName}`}
                               >
                                 Renamed
@@ -374,7 +375,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                               title="Copy original path"
                             >
                               {copiedId === file.id ? (
-                                <Check className="w-3 h-3 text-emerald-400" />
+                                <Check className="w-3 h-3 text-ok" />
                               ) : (
                                 <Copy className="w-3 h-3" />
                               )}
@@ -383,7 +384,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                         </td>
 
                         <td className="py-2.5 px-3">
-                          <span className="px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/25 text-purple-300 text-[10px] font-mono uppercase font-bold tracking-wider">
+                          <span className="px-2 py-0.5 rounded-full chip-accent border text-[10px] font-mono uppercase font-bold tracking-wider">
                             {file.extension || "FILE"}
                           </span>
                         </td>
@@ -392,7 +393,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                           {formatBytes(file.size)}
                         </td>
 
-                        <td className="py-2.5 px-4 text-slate-400 text-[11px]">
+                        <td className="py-2.5 px-4 text-slate-400 text-[11px] hidden md:table-cell">
                           {formatDate(file.lastModified)}
                         </td>
 
@@ -401,7 +402,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                             <button
                               type="button"
                               onClick={() => onPreviewFile(file)}
-                              className="p-1 rounded text-slate-400 hover:text-purple-300 hover:bg-[var(--surface-hover)] transition-colors"
+                              className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-[var(--surface-hover)] transition-colors"
                               title="Preview file content"
                             >
                               <Eye className="w-3.5 h-3.5" />
@@ -409,7 +410,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                             <button
                               type="button"
                               onClick={() => handleDownloadSingle(file)}
-                              className="p-1 rounded text-slate-400 hover:text-emerald-300 hover:bg-[var(--surface-hover)] transition-colors"
+                              className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-[var(--surface-hover)] transition-colors"
                               title="Download this file stripped"
                             >
                               <Download className="w-3.5 h-3.5" />
@@ -436,7 +437,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                 </span>{" "}
                 stripped files
                 {selectedFileIds.size > 0 && (
-                  <span className="ml-3 text-blue-400 font-medium">
+                  <span className="ml-3 text-accent font-medium">
                     ({selectedFileIds.size} selected)
                   </span>
                 )}
@@ -456,4 +457,3 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
     </div>
   );
 };
-
