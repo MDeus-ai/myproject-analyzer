@@ -8,7 +8,7 @@
  * copy, or a bundled ZIP of every changed file) without breaking the
  * dependency tree the prompt was generated from.
  *
- * Protocol (v1):
+ * Protocol (v1.1):
  *
  *   <<<SMART_PASTE_FILE path="src/App.tsx" action="modify">>>
  *   ...complete file contents...
@@ -17,6 +17,13 @@
  *   <<<SMART_PASTE_MANIFEST>>>
  *   - path: src/App.tsx | action: modify | reason: wired the new handler
  *   <<<END_SMART_PASTE_MANIFEST>>>
+ *
+ * v1.1 changes:
+ *  - [0] section: the contract now carries the exact set of files this
+ *    change can touch (target + caller + callee files, from the live
+ *    dependency graph), so the model can't invent paths.
+ *  - [1] explicitly reminds the model that the COMPLETE current target
+ *    file is included in the prompt and must be reproduced in full.
  *
  * Added/modified regions are optionally marked inline with single-line
  * comments containing the [SMART-PASTE] token.
@@ -29,7 +36,7 @@ import type { ProcessedFile } from "../types";
 /* Protocol constants                                                  */
 /* ------------------------------------------------------------------ */
 
-export const SMART_PASTE_PROTOCOL_VERSION = "1.0";
+export const SMART_PASTE_PROTOCOL_VERSION = "1.1";
 export const SMART_PASTE_FILE_OPEN = "<<<SMART_PASTE_FILE";
 export const SMART_PASTE_FILE_CLOSE = "<<<END_SMART_PASTE_FILE>>>";
 export const SMART_PASTE_MANIFEST_OPEN = "<<<SMART_PASTE_MANIFEST>>>";
@@ -56,6 +63,12 @@ export interface SmartPastePromptOptions {
   callees: SmartPasteSymbolRef[];
   /** npm packages already imported by the target. */
   externalPackages: string[];
+  /**
+   * Every file this change can touch (target + caller + callee files).
+   * Emitted as the [0] scope section: the model's file blocks may only
+   * target these paths, plus brand-new files via action="create".
+   */
+  touchedFiles?: string[];
   /** Request inline [SMART-PASTE] marker comments on changed regions. */
   includeMarkers: boolean;
 }
@@ -86,8 +99,9 @@ export interface SmartPasteParseResult {
 /**
  * Builds the Smart Paste output contract that is appended to the surgical
  * prompt. The contract is generated FROM the live dependency tree so the
- * model knows exactly which callers must keep compiling, which helpers
- * already exist, and which packages are already available.
+ * model knows exactly which files the change can touch, which callers must
+ * keep compiling, which helpers already exist, and which packages are
+ * already available.
  */
 export function buildSmartPasteInstructions(
   options: SmartPastePromptOptions,
@@ -99,6 +113,7 @@ export function buildSmartPasteInstructions(
     callers,
     callees,
     externalPackages,
+    touchedFiles,
     includeMarkers,
   } = options;
 
@@ -114,6 +129,20 @@ export function buildSmartPasteInstructions(
   const packagesText = externalPackages.length
     ? externalPackages.map((p) => `   - ${p}`).join("\n")
     : "   (none detected)";
+
+  // [0] Touch scope — generated from the live dependency graph. File blocks
+  // outside this list (other than genuine action="create" additions) are
+  // almost always hallucinated paths, so the contract forbids them upfront
+  // and the verifier flags them on paste-back.
+  const touchedSection =
+    touchedFiles && touchedFiles.length > 0
+      ? [
+          "[0] FILES THIS CHANGE CAN TOUCH — your file blocks may ONLY",
+          '    target these paths (plus brand-new files via action="create"):',
+          ...touchedFiles.map((p) => `    - ${p}`),
+          "",
+        ]
+      : [];
 
   const markersSection = includeMarkers
     ? [
@@ -144,6 +173,7 @@ export function buildSmartPasteInstructions(
     "EXACTLY — deviations (markdown fences, prose between blocks, partial",
     "files, invented paths) break re-integration.",
     "",
+    ...touchedSection,
     "[1] OUTPUT FORMAT — one COMPLETE file block per changed file:",
     "",
     `${SMART_PASTE_FILE_OPEN} path="<exact root-relative path>" action="modify">>>`,
@@ -155,6 +185,9 @@ export function buildSmartPasteInstructions(
     '    - action="delete"  remove a file (body may be empty)',
     '    - NEVER emit diffs, "// ... rest unchanged", or truncated snippets —',
     "      each block REPLACES the whole file in the project.",
+    "    - The COMPLETE current content of the target file is included in",
+    "      this prompt — reproduce it entirely with your changes applied,",
+    "      including every import line. Never invent lines you were shown.",
     "    - Do NOT wrap blocks in triple-backtick fences. No commentary",
     "      between blocks; explanations belong only in the manifest.",
     "",
@@ -267,6 +300,19 @@ export function parseSmartPasteResponse(
     return { changes, warnings: ["Response is empty."], manifest };
   }
 
+  // Guard: the generated prompt (or just its contract) was pasted back
+  // instead of the model's response. The contract contains a template
+  // manifest block that would otherwise be parsed as a real manifest.
+  if (
+    text.includes("SMART PASTE — STRUCTURED OUTPUT CONTRACT") ||
+    text.includes("END OF SMART PASTE CONTRACT") ||
+    text.includes("DEPLENZ SURGICAL CONTEXT")
+  ) {
+    warnings.push(
+      "This looks like the DepLenz-generated prompt, not an LLM response — it contains the output contract itself. Copy the prompt to your model, then paste the model's ANSWER here.",
+    );
+  }
+
   const knownPaths = new Set(
     projectFiles.map((f) => f.relativePath.replace(/\\/g, "/")),
   );
@@ -330,8 +376,16 @@ export function parseSmartPasteResponse(
   }
 
   if (changes.length === 0) {
+    // Distinguish "pasted code without fences" from "nothing usable at all"
+    // so the warning tells the user exactly how to recover.
+    const looksLikeCode =
+      /\b(import|export|function|const|interface|class)\b/.test(text) ||
+      text.includes("=>") ||
+      text.includes("</");
     warnings.push(
-      `No Smart Paste file blocks found. Expected ${SMART_PASTE_FILE_OPEN} path="..." action="...">>> markers.`,
+      looksLikeCode
+        ? `No Smart Paste file blocks found, but the paste contains code. Wrap each file in ${SMART_PASTE_FILE_OPEN} path="..." action="modify">>> … ${SMART_PASTE_FILE_CLOSE} markers, or paste the model's full response.`
+        : `No Smart Paste file blocks found. Expected ${SMART_PASTE_FILE_OPEN} path="..." action="...">>> markers.`,
     );
   }
 
@@ -339,7 +393,13 @@ export function parseSmartPasteResponse(
   if (manifestMatch) {
     for (const line of manifestMatch[1].split("\n")) {
       const t = line.trim();
-      if (t) manifest.push(t.replace(/^[-*]\s*/, ""));
+      if (!t) continue;
+      // The contract's own template line (present when the prompt itself
+      // is pasted back) is not a real manifest entry.
+      if (t.includes("<modify|create|delete>") || /\bpath:\s*<path>/i.test(t)) {
+        continue;
+      }
+      manifest.push(t.replace(/^[-*]\s*/, ""));
     }
   }
 

@@ -17,6 +17,7 @@ import {
   Download,
   AlertTriangle,
   X,
+  Eye,
   Map as MapIcon,
   ClipboardPaste,
   FileArchive,
@@ -24,14 +25,20 @@ import {
   FilePlus2,
   FileX2,
   Loader2,
+  GitBranch,
+  ShieldCheck,
 } from "lucide-react";
 import { ProcessedFile } from "../types";
 import {
   buildCodebaseDependencyGraph,
   searchCodebase,
   extractSurgicalContext,
+  buildPlanPrompt,
+  parsePlanResponse,
+  buildPlannedContext,
   SymbolKind,
   DepLenzGraphNode,
+  PlannedContextResult,
 } from "../utils/depLenz";
 import { DepLenzGraphCanvas } from "./DepLenzGraphCanvas";
 import {
@@ -43,9 +50,11 @@ import {
   SmartPasteParseResult,
   SmartPasteChange,
 } from "../utils/smartPaste";
+import { verifySmartPaste, VerifyReport } from "../utils/smartPasteVerify";
 import { estimateTokens } from "../utils/codeAnalyzer";
 import { copyToClipboard } from "../utils/clipboard";
 import { triggerFileDownload } from "../utils/zipExporter";
+import { SmartPasteDiffPreview } from "./SmartPasteDiffPreview";
 
 interface DepLenzViewProps {
   files: ProcessedFile[];
@@ -112,6 +121,17 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
   const [copiedSmartPath, setCopiedSmartPath] = useState<string | null>(null);
   const [isZippingSmartPaste, setIsZippingSmartPaste] = useState(false);
 
+  // Two-step plan mode (2c)
+  const [planMode, setPlanMode] = useState<boolean>(false);
+  const [planInput, setPlanInput] = useState<string>("");
+  const [plannedResult, setPlannedResult] =
+    useState<PlannedContextResult | null>(null);
+  const [copiedPlan, setCopiedPlan] = useState(false);
+
+  // Verification pipeline (Stages 1-5)
+  const [verifyReport, setVerifyReport] = useState<VerifyReport | null>(null);
+  const [expandedDiffPath, setExpandedDiffPath] = useState<string | null>(null);
+
   // Reset selection & navigation when a different project is loaded while
   // this view is mounted — otherwise stale symbol ids (and a stale history
   // stack) from the previous project linger.
@@ -122,6 +142,10 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
     setNavHistory([]);
     setSmartPasteInput("");
     setSmartPasteResult(null);
+    setExpandedDiffPath(null);
+    setPlanInput("");
+    setPlannedResult(null);
+    setVerifyReport(null);
     setMobilePane("list");
   }, [analysis]);
 
@@ -221,11 +245,12 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
     analysis.fileSymbolsMap,
   ]);
 
-  // Surgical Prompt Context Bundle
+  // Surgical Prompt Context Bundle — 2b: receives the files so the complete
+  // target file (imports included) is embedded in the prompt.
   const surgicalBundle = useMemo(() => {
     if (!activeNode) return null;
-    return extractSurgicalContext(activeNode.symbol.id, analysis);
-  }, [activeNode, analysis]);
+    return extractSurgicalContext(activeNode.symbol.id, analysis, files);
+  }, [activeNode, analysis, files]);
 
   // Smart Paste: structured output contract generated FROM the live
   // dependency tree — callers that must keep compiling, callees to reuse,
@@ -247,16 +272,48 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
         signature: d.symbol.signature,
       })),
       externalPackages: activeNode.externalDependencies,
+      // 3a/contract v1.1: the exact set of files this change can touch.
+      touchedFiles: surgicalBundle
+        ? [
+            activeNode.symbol.filePath,
+            ...activeNode.dependents.map((d) => d.symbol.filePath),
+            ...activeNode.dependencies.map((d) => d.symbol.filePath),
+          ].filter((p, i, a) => a.indexOf(p) === i)
+        : undefined,
       includeMarkers: smartPasteMarkers,
     });
-  }, [activeNode, smartPasteEnabled, smartPasteMarkers]);
+  }, [activeNode, smartPasteEnabled, smartPasteMarkers, surgicalBundle]);
+
+  // Two-step plan mode (2c): step-1 prompt (map + symbol index only).
+  const planPrompt = useMemo(() => {
+    if (!planMode || !activeNode) return "";
+    return buildPlanPrompt(activeNode.symbol.id, analysis, files) ?? "";
+  }, [planMode, activeNode, analysis, files]);
+
+  const handleParsePlan = useCallback(() => {
+    if (!activeNode || !planInput.trim()) return;
+    const plan = parsePlanResponse(planInput);
+    if (plan.length === 0) return;
+    const result = buildPlannedContext(
+      activeNode.symbol.id,
+      plan,
+      analysis,
+      files,
+    );
+    setPlannedResult(result);
+  }, [activeNode, planInput, analysis, files]);
 
   const finalPrompt = useMemo(() => {
+    if (plannedResult) {
+      return smartPasteInstructions
+        ? `${plannedResult.prompt}\n\n${smartPasteInstructions}`
+        : plannedResult.prompt;
+    }
     if (!surgicalBundle) return "";
     return smartPasteInstructions
       ? `${surgicalBundle.formattedPrompt}\n\n${smartPasteInstructions}`
       : surgicalBundle.formattedPrompt;
-  }, [surgicalBundle, smartPasteInstructions]);
+  }, [plannedResult, surgicalBundle, smartPasteInstructions]);
 
   const finalPromptTokens = useMemo(
     () => (finalPrompt ? estimateTokens(finalPrompt) : 0),
@@ -266,12 +323,10 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
   // Copy helpers
   const handleCopyPrompt = async () => {
     if (!finalPrompt) return;
-    try {
-      await navigator.clipboard.writeText(finalPrompt);
+    const ok = await copyToClipboard(finalPrompt);
+    if (ok) {
       setCopiedPrompt(true);
       setTimeout(() => setCopiedPrompt(false), 2500);
-    } catch {
-      // Clipboard unavailable — user can still select-all in the preview.
     }
   };
 
@@ -289,20 +344,25 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
   };
 
   const handleCopyCode = async (code: string) => {
-    try {
-      await navigator.clipboard.writeText(code);
+    const ok = await copyToClipboard(code);
+    if (ok) {
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
-    } catch {
-      // Clipboard unavailable.
     }
   };
 
-  // Smart Paste: parse the pasted LLM response into per-file changes.
+  // Smart Paste: parse the pasted LLM response into per-file changes, then
+  // run the 5-stage verification pipeline BEFORE anything is applied.
   const handleParseSmartPaste = useCallback(() => {
     if (!smartPasteInput.trim()) return;
-    setSmartPasteResult(parseSmartPasteResponse(smartPasteInput, files));
-  }, [smartPasteInput, files]);
+    const result = parseSmartPasteResponse(smartPasteInput, files);
+    setSmartPasteResult(result);
+    setVerifyReport(
+      verifySmartPaste(result, files, analysis, {
+        markersExpected: smartPasteMarkers,
+      }),
+    );
+  }, [smartPasteInput, files, analysis, smartPasteMarkers]);
 
   const handleCopySmartChange = useCallback(
     async (change: SmartPasteChange) => {
@@ -822,14 +882,16 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Blast Radius & Impact Meter */}
+                      {/* Blast Radius & Impact Meter — 1b: callers counted */}
                       <div className="mt-4 p-3 rounded-xl surface-raised border border-subtle flex items-center justify-between">
                         <div>
                           <span className="text-[11px] text-slate-400 block">
                             Change Blast Radius
                           </span>
                           <span className="text-xs font-semibold text-slate-200">
-                            {activeNode.impactRadius} total connected nodes
+                            {activeNode.directCallers} callers ·{" "}
+                            {activeNode.directCallees} callees · blast{" "}
+                            {activeNode.blastRadius}
                           </span>
                         </div>
                         <span
@@ -1266,8 +1328,89 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                     />
                     <span>Marker comments</span>
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlanMode((p) => !p);
+                      setPlannedResult(null);
+                      setPlanInput("");
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] transition-colors cursor-pointer ${
+                      planMode
+                        ? "chip-accent"
+                        : "surface-raised border-chrome text-slate-300 hover:text-white"
+                    }`}
+                    title="Two-step mode: first ask the model which files it will touch, then get a right-sized context for exactly those"
+                  >
+                    <GitBranch className="w-3.5 h-3.5" />
+                    <span>Two-step plan</span>
+                  </button>
                 </div>
               </div>
+
+              {/* TWO-STEP PLAN MODE (2c) */}
+              {planMode && activeNode && (
+                <div className="p-4 rounded-2xl surface-card border border-chrome space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                      <GitBranch className="w-4 h-4 text-purple-400" />
+                      Step 1 — send the map, get back a plan
+                    </span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const ok = await copyToClipboard(planPrompt);
+                        if (ok) {
+                          setCopiedPlan(true);
+                          setTimeout(() => setCopiedPlan(false), 2000);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium cursor-pointer"
+                    >
+                      {copiedPlan ? (
+                        <Check className="w-3.5 h-3.5 text-ok" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                      <span>{copiedPlan ? "Copied!" : "Copy plan prompt"}</span>
+                    </button>
+                  </div>
+                  <pre className="p-3 rounded-xl bg-black/50 border border-subtle font-mono text-[11px] text-slate-300 overflow-x-auto max-h-48 leading-relaxed select-all">
+                    {planPrompt}
+                  </pre>
+                  <textarea
+                    value={planInput}
+                    onChange={(e) => {
+                      setPlanInput(e.target.value);
+                      setPlannedResult(null);
+                    }}
+                    placeholder={
+                      "Paste the model's plan here — expecting <<<DEPLENZ_PLAN>>> … <<<END_DEPLENZ_PLAN>>>"
+                    }
+                    spellCheck={false}
+                    className="w-full h-24 p-3 rounded-xl bg-black/40 border border-subtle font-mono text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-purple-500 resize-y"
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={handleParsePlan}
+                      disabled={!planInput.trim()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium cursor-pointer disabled:opacity-50"
+                    >
+                      <Target className="w-3.5 h-3.5" />
+                      <span>Build step-2 context</span>
+                    </button>
+                  </div>
+                  {plannedResult && (
+                    <p className="text-[11px] text-ok">
+                      Step-2 context ready: {plannedResult.plannedFiles.length}{" "}
+                      planned file(s) included complete · ~
+                      {plannedResult.estimatedTokens.toLocaleString()} tokens —
+                      use Copy for LLM below.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Prompt Preview Codeblock */}
               {surgicalBundle ? (
@@ -1343,6 +1486,10 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                   onChange={(e) => {
                     setSmartPasteInput(e.target.value);
                     if (smartPasteResult) setSmartPasteResult(null);
+                    if (verifyReport) setVerifyReport(null);
+                    if (smartPasteResult) setSmartPasteResult(null);
+                    if (verifyReport) setVerifyReport(null);
+                    setExpandedDiffPath(null);
                   }}
                   placeholder={`Paste the LLM response here — expecting ${SMART_PASTE_FILE_OPEN} path="..." action="modify">>> blocks…`}
                   spellCheck={false}
@@ -1359,6 +1506,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                         type="button"
                         onClick={() => {
                           setSmartPasteResult(null);
+                          setVerifyReport(null);
                           setSmartPasteInput("");
                         }}
                         className="px-3 py-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-white text-xs cursor-pointer"
@@ -1373,7 +1521,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium cursor-pointer shadow-sm transition-colors disabled:opacity-50"
                     >
                       <Target className="w-3.5 h-3.5" />
-                      <span>Parse Changed Files</span>
+                      <span>Parse &amp; Verify</span>
                     </button>
                   </div>
                 </div>
@@ -1387,6 +1535,86 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                         <span>{w}</span>
                       </p>
                     ))}
+                  </div>
+                )}
+
+                {/* Verification report — Stages 1-5, runs before anything is applied */}
+                {verifyReport && smartPasteResult && (
+                  <div
+                    className={`p-3.5 rounded-xl border space-y-2 text-[11px] ${
+                      verifyReport.errorCount > 0
+                        ? "bg-danger-soft border-danger"
+                        : verifyReport.warningCount > 0
+                          ? "bg-warn-soft border-warn"
+                          : "bg-ok-soft border-ok"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-xs text-slate-100 flex items-center gap-1.5">
+                        <ShieldCheck
+                          className={`w-4 h-4 ${
+                            verifyReport.errorCount > 0
+                              ? "text-danger"
+                              : verifyReport.warningCount > 0
+                                ? "text-warn"
+                                : "text-ok"
+                          }`}
+                        />
+                        Verification — 5-stage paste-back check
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">
+                        {verifyReport.errorCount} errors ·{" "}
+                        {verifyReport.warningCount} warnings ·{" "}
+                        {verifyReport.preservedCount} symbols preserved
+                      </span>
+                    </div>
+
+                    {verifyReport.mustUpdate.length > 0 && (
+                      <div className="p-2.5 rounded-lg bg-danger-soft border border-danger">
+                        <p className="font-semibold text-danger mb-1">
+                          Must change but NOT in this paste (
+                          {verifyReport.mustUpdate.length}):
+                        </p>
+                        <ul className="space-y-0.5 font-mono text-[10px] text-slate-200">
+                          {verifyReport.mustUpdate.map((m) => (
+                            <li key={`${m.file}:${m.symbol}`}>
+                              • {m.file} — {m.symbol}(): {m.reason}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <ul className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                      {verifyReport.findings.map((f, i) => (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <span
+                            className={`shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full ${
+                              f.severity === "error"
+                                ? "bg-rose-400"
+                                : f.severity === "warning"
+                                  ? "bg-amber-400"
+                                  : "bg-sky-400"
+                            }`}
+                          />
+                          <span className="text-slate-300">
+                            <span className="text-slate-500 font-mono">
+                              [S{f.stage}]
+                            </span>{" "}
+                            {f.path && (
+                              <span className="font-mono text-slate-400">
+                                {f.path}:{" "}
+                              </span>
+                            )}
+                            {f.message}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <p className="text-[10px] text-slate-500">
+                      {verifyReport.summary}
+                    </p>
                   </div>
                 )}
 
@@ -1409,92 +1637,126 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                       const isCopied = copiedSmartPath === change.path;
 
                       return (
-                        <div
-                          key={change.path}
-                          className="flex items-center gap-2.5 p-2.5 rounded-xl surface-inset border border-subtle"
-                        >
-                          <div className="p-1.5 rounded-lg surface-raised border border-subtle shrink-0">
-                            <ActionIcon className="w-3.5 h-3.5 text-slate-300" />
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-mono text-xs font-semibold text-slate-200 truncate">
-                                {change.path}
-                              </span>
-                              <span
-                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${actionCls}`}
-                              >
-                                {change.action}
-                              </span>
-                              {change.markerCount > 0 && (
-                                <span
-                                  className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-ok border border-ok"
-                                  title="Inline [SMART-PASTE] marker comments in this file"
-                                >
-                                  {change.markerCount} marker
-                                  {change.markerCount !== 1 ? "s" : ""}
+                        /* Wrapper: stacks the row and its expandable diff preview */
+                        <div key={change.path} className="space-y-2">
+                          {/* Row — same content as before; the key lives on the wrapper now */}
+                          <div className="flex items-center gap-2.5 p-2.5 rounded-xl surface-inset border border-subtle">
+                            <div className="p-1.5 rounded-lg surface-raised border border-subtle shrink-0">
+                              <ActionIcon className="w-3.5 h-3.5 text-slate-300" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-xs font-semibold text-slate-200 truncate">
+                                  {change.path}
                                 </span>
-                              )}
-                              {!change.existsInProject &&
-                                change.action === "modify" && (
-                                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-warn-soft text-warn border border-warn">
-                                    not in loaded project
+                                <span
+                                  className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${actionCls}`}
+                                >
+                                  {change.action}
+                                </span>
+                                {change.markerCount > 0 && (
+                                  <span
+                                    className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-ok border border-ok"
+                                    title="Inline [SMART-PASTE] marker comments in this file"
+                                  >
+                                    {change.markerCount} marker
+                                    {change.markerCount !== 1 ? "s" : ""}
                                   </span>
                                 )}
+                                {!change.existsInProject &&
+                                  change.action === "modify" && (
+                                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-warn-soft text-warn border border-warn">
+                                      not in loaded project
+                                    </span>
+                                  )}
+                              </div>
+                              <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                {change.action === "delete"
+                                  ? "File will be removed (recorded in ZIP manifest only)"
+                                  : `${change.content
+                                      .split("\n")
+                                      .length.toLocaleString()} lines • ${change.content.length.toLocaleString()} chars`}
+                              </p>
                             </div>
-                            <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                              {change.action === "delete"
-                                ? "File will be removed (recorded in ZIP manifest only)"
-                                : `${change.content
-                                    .split("\n")
-                                    .length.toLocaleString()} lines • ${change.content.length.toLocaleString()} chars`}
-                            </p>
+
+                            {/* Diff preview toggle */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedDiffPath((p) =>
+                                  p === change.path ? null : change.path,
+                                )
+                              }
+                              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[11px] cursor-pointer transition-colors shrink-0 ${
+                                expandedDiffPath === change.path
+                                  ? "chip-accent"
+                                  : "surface-raised border-chrome text-slate-300 hover:text-white"
+                              }`}
+                              title="Preview how this paste rewrites the file"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>Diff</span>
+                            </button>
+
+                            {change.action !== "delete" && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void handleCopySmartChange(change)
+                                  }
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-white text-[11px] cursor-pointer transition-colors"
+                                  title="Copy this file's full contents"
+                                >
+                                  {isCopied ? (
+                                    <>
+                                      <Check className="w-3 h-3 text-ok" />
+                                      <span className="text-ok">Copied</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3" />
+                                      <span>Copy file</span>
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const content = smartPasteMarkers
+                                      ? change.content
+                                      : stripSmartPasteMarkers(change.content);
+                                    const fileName =
+                                      change.path.split("/").pop() ??
+                                      change.path;
+                                    triggerFileDownload(
+                                      new Blob([content], {
+                                        type: "text/plain;charset=utf-8",
+                                      }),
+                                      fileName,
+                                    );
+                                  }}
+                                  className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-400 hover:text-emerald-300 cursor-pointer transition-colors"
+                                  title="Download just this file"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
                           </div>
 
-                          {change.action !== "delete" && (
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void handleCopySmartChange(change)
-                                }
-                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-white text-[11px] cursor-pointer transition-colors"
-                                title="Copy this file's full contents"
-                              >
-                                {isCopied ? (
-                                  <>
-                                    <Check className="w-3 h-3 text-ok" />
-                                    <span className="text-ok">Copied</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="w-3 h-3" />
-                                    <span>Copy file</span>
-                                  </>
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const content = smartPasteMarkers
-                                    ? change.content
-                                    : stripSmartPasteMarkers(change.content);
-                                  const fileName =
-                                    change.path.split("/").pop() ?? change.path;
-                                  triggerFileDownload(
-                                    new Blob([content], {
-                                      type: "text/plain;charset=utf-8",
-                                    }),
-                                    fileName,
-                                  );
-                                }}
-                                className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-400 hover:text-emerald-300 cursor-pointer transition-colors"
-                                title="Download just this file"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                          {/* Expandable inline diff — green added / red removed */}
+                          {expandedDiffPath === change.path && (
+                            <SmartPasteDiffPreview
+                              path={change.path}
+                              action={change.action}
+                              content={change.content}
+                              originalContent={
+                                files.find(
+                                  (f) => f.relativePath === change.path,
+                                )?.textContent ?? undefined
+                              }
+                            />
                           )}
                         </div>
                       );

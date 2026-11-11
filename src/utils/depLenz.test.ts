@@ -4,10 +4,14 @@ import {
   extractSymbolsFromFile,
   extractInvokedNames,
   extractFileImports,
+  extractTypeDeclarations,
   resolveRelativeImportPath,
   buildCodebaseDependencyGraph,
   searchCodebase,
   extractSurgicalContext,
+  buildPlanPrompt,
+  parsePlanResponse,
+  buildPlannedContext,
   validateFileSyntax,
 } from "./depLenz";
 import { ProcessedFile } from "../types";
@@ -95,7 +99,11 @@ export function useInvoice(items: number[]) {
 ];
 
 test("extractSymbolsFromFile identifies functions, arrow functions, components and hooks", () => {
-  const symbols = extractSymbolsFromFile(mockFiles[0].textContent!, mockFiles[0].relativePath, mockFiles[0].name);
+  const symbols = extractSymbolsFromFile(
+    mockFiles[0].textContent!,
+    mockFiles[0].relativePath,
+    mockFiles[0].name,
+  );
   assert.equal(symbols.length, 3);
 
   const addSym = symbols.find((s) => s.name === "add");
@@ -112,13 +120,21 @@ test("extractSymbolsFromFile identifies functions, arrow functions, components a
   assert.ok(calcSym.calls.includes("add"));
 
   // Check component detection
-  const cardSymbols = extractSymbolsFromFile(mockFiles[1].textContent!, mockFiles[1].relativePath, mockFiles[1].name);
+  const cardSymbols = extractSymbolsFromFile(
+    mockFiles[1].textContent!,
+    mockFiles[1].relativePath,
+    mockFiles[1].name,
+  );
   const comp = cardSymbols.find((s) => s.name === "InvoiceCard");
   assert.ok(comp);
   assert.equal(comp.kind, "component");
 
   // Check hook detection
-  const hookSymbols = extractSymbolsFromFile(mockFiles[2].textContent!, mockFiles[2].relativePath, mockFiles[2].name);
+  const hookSymbols = extractSymbolsFromFile(
+    mockFiles[2].textContent!,
+    mockFiles[2].relativePath,
+    mockFiles[2].name,
+  );
   const hook = hookSymbols.find((s) => s.name === "useInvoice");
   assert.ok(hook);
   assert.equal(hook.kind, "hook");
@@ -138,7 +154,11 @@ test("extractInvokedNames discovers called functions and JSX elements", () => {
 });
 
 test("extractFileImports and resolveRelativeImportPath parse imports correctly", () => {
-  const imports = extractFileImports(mockFiles[1].textContent!, mockFiles[1].relativePath, mockFiles);
+  const imports = extractFileImports(
+    mockFiles[1].textContent!,
+    mockFiles[1].relativePath,
+    mockFiles,
+  );
   assert.ok(imports.length >= 2);
 
   const mathImp = imports.find((i) => i.sourcePath === "../utils/mathUtils");
@@ -169,14 +189,18 @@ test("buildCodebaseDependencyGraph creates full bi-directional callee & caller g
   assert.ok(calcNode.dependents.some((d) => d.symbol.name === "InvoiceCard"));
   assert.ok(calcNode.dependents.some((d) => d.symbol.name === "useInvoice"));
 
-  // Check impact radius
+  // Check impact radius (direct callers + direct callees)
   assert.ok(calcNode.impactRadius >= 3);
   assert.equal(calcNode.impactLevel, "medium");
 });
 
 test("searchCodebase finds keyword matches and assigns enclosing symbols", () => {
   const analysis = buildCodebaseDependencyGraph(mockFiles);
-  const matches = searchCodebase(mockFiles, { query: "taxRate" }, analysis.fileSymbolsMap);
+  const matches = searchCodebase(
+    mockFiles,
+    { query: "taxRate" },
+    analysis.fileSymbolsMap,
+  );
 
   assert.ok(matches.length > 0);
   const match = matches[0];
@@ -185,28 +209,253 @@ test("searchCodebase finds keyword matches and assigns enclosing symbols", () =>
   assert.equal(match.enclosingSymbol.name, "InvoiceCard");
 });
 
-test("extractSurgicalContext generates complete bundle for LLM targeting a symbol", () => {
+test("extractSurgicalContext includes full target file, types, map and touched files", () => {
   const analysis = buildCodebaseDependencyGraph(mockFiles);
-  const bundle = extractSurgicalContext("src/utils/mathUtils.ts:calculateTotal", analysis);
+  const bundle = extractSurgicalContext(
+    "src/utils/mathUtils.ts:calculateTotal",
+    analysis,
+    mockFiles,
+    "add tax support",
+  );
 
   assert.ok(bundle);
   assert.equal(bundle.targetSymbol.name, "calculateTotal");
   assert.ok(bundle.callees.some((c) => c.name === "add"));
   assert.ok(bundle.callers.some((c) => c.name === "InvoiceCard"));
-  assert.ok(bundle.callers.some((c) => c.name === "useInvoice"));
 
-  // Formatted prompt should include sections
-  assert.ok(bundle.formattedPrompt.includes("DEPLENZ SURGICAL CONTEXT FOR LLM"));
-  assert.ok(bundle.formattedPrompt.includes("TARGET IMPLEMENTATION (calculateTotal)"));
-  assert.ok(bundle.formattedPrompt.includes("DIRECT DEPENDENCIES"));
-  assert.ok(bundle.formattedPrompt.includes("DIRECT CALLERS"));
+  // 2b: complete target file (imports and all), not just the symbol body
+  assert.ok(bundle.formattedPrompt.includes("COMPLETE TARGET FILE"));
+  assert.ok(bundle.formattedPrompt.includes(mockFiles[0].textContent!.trim()));
+  // 3a: annotated project map + touched-files list
+  assert.ok(bundle.formattedPrompt.includes("PROJECT MAP"));
+  assert.ok(bundle.formattedPrompt.includes("FILES TOUCHED BY THIS CHANGE"));
+  // callers/callees sections + task
+  assert.ok(bundle.formattedPrompt.includes("UPSTREAM CALLERS"));
+  assert.ok(bundle.formattedPrompt.includes("DOWNSTREAM DEPENDENCIES"));
+  assert.ok(bundle.formattedPrompt.includes("add tax support"));
+  assert.ok(bundle.touchedFiles.includes("src/utils/mathUtils.ts"));
+  assert.ok(bundle.touchedFiles.includes("src/components/InvoiceCard.tsx"));
   assert.ok(bundle.estimatedTokens > 0);
+});
+
+test("FIX 1a: default imports, barrel re-exports and lazy() register callers", () => {
+  const files: ProcessedFile[] = [
+    {
+      id: "d1",
+      name: "Dashboard.tsx",
+      originalName: "Dashboard.tsx",
+      flattenedName: "Dashboard.tsx",
+      relativePath: "src/pages/Dashboard.tsx",
+      pathSegments: ["src", "pages", "Dashboard.tsx"],
+      directoryPath: "src/pages",
+      size: 100,
+      type: "text/typescript",
+      extension: "tsx",
+      lastModified: 1,
+      textContent: `
+export default function Dashboard() {
+  return <main>Dash</main>;
+}
+`,
+    },
+    {
+      id: "d2",
+      name: "Button.tsx",
+      originalName: "Button.tsx",
+      flattenedName: "Button.tsx",
+      relativePath: "src/components/Button.tsx",
+      pathSegments: ["src", "components", "Button.tsx"],
+      directoryPath: "src/components",
+      size: 100,
+      type: "text/typescript",
+      extension: "tsx",
+      lastModified: 2,
+      textContent: `
+export function Button({ label }: { label: string }) {
+  return <button>{label}</button>;
+}
+`,
+    },
+    {
+      id: "d3",
+      name: "index.ts",
+      originalName: "index.ts",
+      flattenedName: "index.ts",
+      relativePath: "src/components/index.ts",
+      pathSegments: ["src", "components", "index.ts"],
+      directoryPath: "src/components",
+      size: 60,
+      type: "text/typescript",
+      extension: "ts",
+      lastModified: 3,
+      textContent: `export { Button } from "./Button";\n`,
+    },
+    {
+      id: "d4",
+      name: "App.tsx",
+      originalName: "App.tsx",
+      flattenedName: "App.tsx",
+      relativePath: "src/App.tsx",
+      pathSegments: ["src", "App.tsx"],
+      directoryPath: "src",
+      size: 200,
+      type: "text/typescript",
+      extension: "tsx",
+      lastModified: 4,
+      textContent: `
+import React, { lazy } from "react";
+import Dash from "./pages/Dashboard";
+import { Button } from "./components";
+
+const Reports = lazy(() => import("./pages/Reports"));
+
+export function App() {
+  return (
+    <>
+      <Dash />
+      <Button label="go" />
+      <Reports />
+    </>
+  );
+}
+`,
+    },
+    {
+      id: "d5",
+      name: "Reports.tsx",
+      originalName: "Reports.tsx",
+      flattenedName: "Reports.tsx",
+      relativePath: "src/pages/Reports.tsx",
+      pathSegments: ["src", "pages", "Reports.tsx"],
+      directoryPath: "src/pages",
+      size: 100,
+      type: "text/typescript",
+      extension: "tsx",
+      lastModified: 5,
+      textContent: `
+export default function Reports() {
+  return <section>Reports</section>;
+}
+`,
+    },
+  ];
+
+  const result = buildCodebaseDependencyGraph(files);
+
+  // default import under a DIFFERENT local name (Dash) still links
+  const dashboard = result.nodesMap.get("src/pages/Dashboard.tsx:Dashboard");
+  assert.ok(dashboard);
+  assert.ok(
+    dashboard.dependents.some((d) => d.symbol.name === "App"),
+    "Dashboard should list App as a caller via default import",
+  );
+
+  // barrel re-export: Button imported from "./components" (index.ts)
+  const button = result.nodesMap.get("src/components/Button.tsx:Button");
+  assert.ok(button);
+  assert.ok(
+    button.dependents.some((d) => d.symbol.name === "App"),
+    "Button should list App as a caller through the barrel",
+  );
+
+  // React.lazy(() => import(...)) edge
+  const reports = result.nodesMap.get("src/pages/Reports.tsx:Reports");
+  assert.ok(reports);
+  assert.ok(
+    reports.dependents.some((d) => d.symbol.name === "App"),
+    "Reports should list App as a caller via lazy()",
+  );
+
+  // 1b: split fields present and blast radius counts upstream
+  assert.equal(button.directCallers, 1);
+  assert.ok(button.blastRadius >= 1);
+  assert.equal(typeof button.impactRadius, "number");
+});
+
+test("FIX 2a: multi-line inline-typed signatures are never truncated", () => {
+  const content = `
+export function Button({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+}) {
+  return <button onClick={onClick}>{children}</button>;
+}
+`;
+  const symbols = extractSymbolsFromFile(
+    content,
+    "src/Button.tsx",
+    "Button.tsx",
+  );
+  assert.equal(symbols.length, 1);
+  const sig = symbols[0].signature;
+  assert.ok(sig.includes("onClick?: () => void"), `truncated: ${sig}`);
+  assert.ok(sig.includes("children: React.ReactNode"), `truncated: ${sig}`);
+});
+
+test("FIX 2a: type declarations are extracted and indexed", () => {
+  const content = `
+export interface ButtonProps {
+  size: ButtonSize;
+  onClick?: () => void;
+}
+
+export type ButtonSize = "sm" | "lg";
+`;
+  const types = extractTypeDeclarations(content, "src/types.ts");
+  assert.equal(types.length, 2);
+  const props = types.find((t) => t.name === "ButtonProps");
+  assert.ok(props);
+  assert.equal(props.kind, "interface");
+  assert.ok(props.references.includes("ButtonSize"));
+});
+
+test("FIX 2c: plan prompt + plan parsing round-trip", () => {
+  const analysis = buildCodebaseDependencyGraph(mockFiles);
+  const prompt = buildPlanPrompt(
+    "src/utils/mathUtils.ts:calculateTotal",
+    analysis,
+    mockFiles,
+    "add tax support",
+  );
+  assert.ok(prompt);
+  assert.ok(prompt.includes("SYMBOL INDEX"));
+  assert.ok(prompt.includes("DO NOT WRITE CODE YET"));
+
+  const plan = parsePlanResponse(
+    [
+      "<<<DEPLENZ_PLAN>>>",
+      "- file: src/utils/mathUtils.ts | symbols: calculateTotal | change: add tax param",
+      "- file: src/components/InvoiceCard.tsx | symbols: InvoiceCard | change: pass tax",
+      "<<<END_DEPLENZ_PLAN>>>",
+    ].join("\n"),
+  );
+  assert.equal(plan.length, 2);
+  assert.equal(plan[0].path, "src/utils/mathUtils.ts");
+  assert.deepEqual(plan[0].symbols, ["calculateTotal"]);
+
+  const ctx = buildPlannedContext(
+    "src/utils/mathUtils.ts:calculateTotal",
+    plan,
+    analysis,
+    mockFiles,
+    "add tax support",
+  );
+  assert.ok(ctx);
+  assert.ok(ctx.plannedFiles.includes("src/components/InvoiceCard.tsx"));
+  assert.ok(ctx.prompt.includes("PLANNED FILES"));
+  assert.ok(ctx.prompt.includes(mockFiles[1].textContent!.trim()));
 });
 
 test("validateFileSyntax identifies unclosed delimiters, mismatched brackets and JSON syntax errors", () => {
   // 1. Clean code produces zero diagnostics
   const cleanTs = `export function greet(name: string) { return "hello " + name; }`;
-  assert.equal(validateFileSyntax(cleanTs, "src/greet.ts", "greet.ts").length, 0);
+  assert.equal(
+    validateFileSyntax(cleanTs, "src/greet.ts", "greet.ts").length,
+    0,
+  );
 
   // 2. Unclosed brace
   const unclosedBrace = `
@@ -215,7 +464,11 @@ export function badFunc() {
     return 42;
   // Missing closing brace
 `;
-  const unclosedDiags = validateFileSyntax(unclosedBrace, "src/bad.ts", "bad.ts");
+  const unclosedDiags = validateFileSyntax(
+    unclosedBrace,
+    "src/bad.ts",
+    "bad.ts",
+  );
   assert.ok(unclosedDiags.length > 0);
   assert.equal(unclosedDiags[0].category, "unclosed-delimiter");
   assert.equal(unclosedDiags[0].severity, "error");
@@ -227,7 +480,11 @@ export function mismatch() {
   return arr;
 }
 `;
-  const mismatchDiags = validateFileSyntax(mismatched, "src/mismatch.ts", "mismatch.ts");
+  const mismatchDiags = validateFileSyntax(
+    mismatched,
+    "src/mismatch.ts",
+    "mismatch.ts",
+  );
   assert.ok(mismatchDiags.length > 0);
   assert.equal(mismatchDiags[0].category, "mismatched-delimiter");
 
@@ -237,7 +494,11 @@ export function extraClose() {
   return true;
 }}
 `;
-  const unexpectedDiags = validateFileSyntax(unexpectedClosing, "src/extra.ts", "extra.ts");
+  const unexpectedDiags = validateFileSyntax(
+    unexpectedClosing,
+    "src/extra.ts",
+    "extra.ts",
+  );
   assert.ok(unexpectedDiags.length > 0);
   assert.equal(unexpectedDiags[0].category, "unexpected-delimiter");
 
@@ -249,7 +510,11 @@ export function extraClose() {
 
   // 6. Malformed JSON
   const invalidJson = `{ "name": "test", "items": [1, 2, }`;
-  const jsonDiags = validateFileSyntax(invalidJson, "package.json", "package.json");
+  const jsonDiags = validateFileSyntax(
+    invalidJson,
+    "package.json",
+    "package.json",
+  );
   assert.ok(jsonDiags.length > 0);
   assert.equal(jsonDiags[0].category, "json-syntax");
   assert.equal(jsonDiags[0].severity, "error");
