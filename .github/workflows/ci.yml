@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, beta-version]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install (all workspaces)
+        run: npm ci
+
+      - name: Core test suite
+        run: npm test
+
+      - name: Typecheck all packages
+        run: npm run typecheck
+
+      - name: Web production build
+        run: npm run build
