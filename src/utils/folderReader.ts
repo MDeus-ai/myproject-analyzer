@@ -36,6 +36,142 @@ const SNIFF_BYTES = 4096;
 /** MIME families that are never text — skipped without wasting a sniff read. */
 const BINARY_MIME_PREFIXES = ["image/", "audio/", "video/"];
 
+/**
+ * Decoded-text characters that prove a payload is NOT text:
+ *  - U+0000 (NUL): valid UTF-8 source code never contains it; virtually
+ *    every binary format does within its first bytes. NOTE: binary payloads
+ *    that are mostly ASCII decode WITHOUT producing U+FFFD, so checking only
+ *    for the replacement character is not enough — NUL must be checked too.
+ *  - U+FFFD: replacement character produced when invalid UTF-8 sequences
+ *    are decoded (e.g. a true binary renamed to a text extension).
+ * Explicit unicode escapes are used so the literals can't be mangled by
+ * editor encoding.
+ */
+const BINARY_TELLS = /[\u0000\uFFFD]/;
+
+/**
+ * Extensions that are ALWAYS plain text — checked before ANY MIME logic.
+ *
+ * Why this must exist: the OS MIME registry maps ".ts" to video/mp2t
+ * (MPEG-2 Transport Stream), so every TypeScript file arrives with
+ * type === "video/mp2t". The old gate ran the binary-MIME early exit
+ * first, which killed every .ts file before the allowlist or content
+ * sniff ever ran — the "(Binary content — not readable as text)" bug.
+ */
+const TEXT_EXTENSION_OVERRIDES = new Set([
+  // JS/TS — "ts" is the actual bug fix
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "mts",
+  "cts",
+  "json",
+  "jsonc",
+  "json5",
+  "map",
+  // web
+  "html",
+  "htm",
+  "css",
+  "scss",
+  "sass",
+  "less",
+  "vue",
+  "svelte",
+  "astro",
+  // docs & data
+  "md",
+  "markdown",
+  "mdx",
+  "txt",
+  "csv",
+  "tsv",
+  "xml",
+  "svg",
+  "yaml",
+  "yml",
+  "toml",
+  "ini",
+  "cfg",
+  "conf",
+  "env",
+  "properties",
+  // languages
+  "py",
+  "pyi",
+  "rb",
+  "go",
+  "rs",
+  "java",
+  "kt",
+  "swift",
+  "c",
+  "h",
+  "cpp",
+  "hpp",
+  "cs",
+  "php",
+  "lua",
+  "dart",
+  "r",
+  // shell / infra
+  "sh",
+  "bash",
+  "zsh",
+  "ps1",
+  "sql",
+  "graphql",
+  "gql",
+  "prisma",
+  "proto",
+  "tf",
+  "hcl",
+  "gradle",
+  "cmake",
+  "mk",
+  // dotfile-style names (covers getFileExtension(".gitignore") either way)
+  "gitignore",
+  "gitattributes",
+  "editorconfig",
+  "npmrc",
+  "nvmrc",
+  "prettierrc",
+  "eslintrc",
+  "dockerignore",
+  "lock",
+  "dockerfile",
+  "makefile",
+]);
+
+/** Extensionless basenames that are text. */
+const TEXT_FILENAME_OVERRIDES = new Set([
+  "dockerfile",
+  "makefile",
+  "license",
+  "readme",
+  "changelog",
+  ".gitignore",
+  ".gitattributes",
+  ".env",
+  ".npmrc",
+  ".nvmrc",
+  ".editorconfig",
+  ".prettierrc",
+  ".eslintrc",
+]);
+
+function isTextOverride(name: string): boolean {
+  const base = name.split(/[\\/]/).pop()!.toLowerCase();
+  if (TEXT_FILENAME_OVERRIDES.has(base)) return true;
+  // .env, .env.local, .env.production, .env.example — extension varies, so
+  // the extension set alone can't cover the family.
+  if (base.startsWith(".env")) return true;
+  return TEXT_EXTENSION_OVERRIDES.has(getFileExtension(name).toLowerCase());
+}
+
 function isBinaryMime(mime: string): boolean {
   return BINARY_MIME_PREFIXES.some((p) => mime.startsWith(p));
 }
@@ -64,11 +200,17 @@ export async function sniffIsText(blob: Blob): Promise<boolean> {
     return false;
   }
 }
+
 /**
- * Reads a file's text when it is genuinely text. Fast-path: the
- * identifyCodeFileType/MIME check. Slow-path: content sniffing, which
- * catches text files the allowlist misses (.gradle, .tf, .cfg, .rst,
- * extensionless files) and never mislabels binaries.
+ * Reads a file's text when it is genuinely text.
+ *
+ * ORDER IS THE FIX:
+ *  1. Extension/filename allowlist — AUTHORITATIVE, runs before any MIME
+ *     check (rescues .ts from its bogus video/mp2t MIME type).
+ *  2. Binary-MIME early exit — only reached by files that claimed no text
+ *     identity, so video/* can now only kill actual videos.
+ *  3. NUL-byte content sniff — for the unknown middle ground (.gradle,
+ *     .tf, extensionless scripts, empty-MIME files).
  */
 export async function readTextIfReadable(
   blob: Blob,
@@ -76,11 +218,20 @@ export async function readTextIfReadable(
   mimeType: string,
 ): Promise<string | undefined> {
   if (blob.size > MAX_TEXT_READ_SIZE) return undefined;
-  if (isBinaryMime(mimeType)) return undefined;
   try {
-    if (isTextReadableFile(name, mimeType)) {
-      return await blob.text();
+    if (isTextOverride(name) || isTextReadableFile(name, mimeType)) {
+      const text = await blob.text();
+      // Paranoia guard: the override list also claims genuine MPEG-2 TS
+      // videos (recording.ts). A true binary decodes with NUL bytes
+      // (U+0000) or replacement chars (U+FFFD) — reject it rather than
+      // export garbage. Trade-off: legacy-encoded source files (Latin-1
+      // with accented characters) are rejected too; web codebases are
+      // overwhelmingly UTF-8, so this is the safe default.
+      return BINARY_TELLS.test(text) ? undefined : text;
     }
+
+    if (isBinaryMime(mimeType)) return undefined;
+
     if (await sniffIsText(blob)) {
       return await blob.text();
     }
@@ -261,9 +412,10 @@ export async function processFileList(
     let textContent: string | undefined;
     let previewUrl: string | undefined;
 
-    // Content-based readability: code/dotfile fast-path first, NUL-byte
-    // sniffing for everything else (.gradle, .tf, .cfg, .rst, unknown
-    // extensions, empty-MIME files like .env.example/.go/.rs), 512KB cap.
+    // Content-based readability: extension/filename allowlist FIRST (this
+    // is what rescues .ts files from their video/mp2t MIME type), then the
+    // binary-MIME shortcut, then NUL-byte sniffing for unknowns (.gradle,
+    // .tf, extensionless files, empty-MIME dotfiles). 512KB size cap.
     if (!isExcluded) {
       textContent = await readTextIfReadable(file, name, file.type || "");
     }
