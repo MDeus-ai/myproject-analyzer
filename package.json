@@ -12,14 +12,21 @@
     "preview": "npm run preview --workspace=@myproject/web",
     "test": "npm run test --workspace=@myproject/core",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "dev:desktop": "concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && npm run start -w @myproject/desktop\""
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "concurrently": "^10.0.7",
     "tsx": "^4.21.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wait-on": "^9.5.1"
   },
   "engines": {
     "node": ">=18"
+  },
+  "allowScripts": {
+    "electron@45.3.0": true,
+    "esbuild@0.28.2": true
   }
 }
