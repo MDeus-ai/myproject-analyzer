@@ -10,6 +10,11 @@ import type {
   ApplyChangesIpcOptions,
   ApplyChangesIpcResult,
   DesktopHostBridge,
+  EngineBuildGraphIpcResult,
+  EngineEstimateTokensIpcResult,
+  EngineFileInputIpc,
+  EngineSearchIpcResult,
+  EngineSearchOptionsIpc,
   PickFolderIpcResult,
   SaveFileIpcResult,
   StartWatchIpcOptions,
@@ -75,6 +80,27 @@ const bridge: DesktopHostBridge = {
       return "";
     }
   },
+  engineBuildGraph: (
+    files: EngineFileInputIpc[],
+  ): Promise<EngineBuildGraphIpcResult> =>
+    ipcRenderer.invoke(DesktopIpc.engineBuildGraph, files),
+  engineSearch: (
+    files: EngineFileInputIpc[],
+    opts: EngineSearchOptionsIpc,
+    symbolsMapJson: string | null,
+  ): Promise<EngineSearchIpcResult> =>
+    ipcRenderer.invoke(DesktopIpc.engineSearch, files, opts, symbolsMapJson),
+  engineEstimateTokens: (
+    files: EngineFileInputIpc[],
+    includeToc: boolean,
+    includeLineNumbers: boolean,
+  ): Promise<EngineEstimateTokensIpcResult> =>
+    ipcRenderer.invoke(
+      DesktopIpc.engineEstimateTokens,
+      files,
+      includeToc,
+      includeLineNumbers,
+    ),
 };
 
 contextBridge.exposeInMainWorld("myprojectDesktop", bridge);

@@ -13,6 +13,8 @@
     "test": "npm run test --workspace=@myproject/core",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
+    "build:rust": "npm run build:rust --workspace=@myproject/rust-engine",
+    "test:rust": "npm run test:rust --workspace=@myproject/rust-engine",
     "dist:desktop": "npm run dist -w @myproject/desktop",
     "dev:desktop": "concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && npm run start -w @myproject/desktop\""
   },
@@ -29,5 +31,10 @@
   "allowScripts": {
     "electron@45.3.0": true,
     "esbuild@0.28.2": true
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@fontsource/ibm-plex-sans-condensed": "^5.3.0"
   }
 }

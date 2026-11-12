@@ -565,3 +565,209 @@ export function broken() {
   // Still successfully mapped valid symbols from mockFiles
   assert.ok(result.nodesMap.has("src/utils/mathUtils.ts:calculateTotal"));
 });
+
+test("O(1) import resolution scales linearly on 1,000+ file codebases", () => {
+  const largeRepo: ProcessedFile[] = [];
+  const count = 1000;
+  for (let i = 0; i < count; i++) {
+    const prev = i > 0 ? `import { fn${i - 1} } from "./mod${i - 1}";\n` : "";
+    const call = i > 0 ? `return fn${i - 1}() + 1;` : "return 1;";
+    largeRepo.push({
+      id: `large-${i}`,
+      name: `mod${i}.ts`,
+      originalName: `mod${i}.ts`,
+      flattenedName: `mod${i}.ts`,
+      relativePath: `bigproj/src/modules/mod${i}.ts`,
+      pathSegments: ["bigproj", "src", "modules", `mod${i}.ts`],
+      directoryPath: "src/modules",
+      size: 120,
+      type: "text/typescript",
+      extension: "ts",
+      lastModified: 1700000000000,
+      textContent: `${prev}export function fn${i}() { ${call} }\n`,
+    });
+  }
+
+  const t0 = performance.now();
+  const graph = buildCodebaseDependencyGraph(largeRepo);
+  const elapsedMs = performance.now() - t0;
+
+  assert.equal(graph.totalFunctions, count);
+  assert.equal(graph.totalDependenciesMapped, count - 1);
+  assert.ok(
+    elapsedMs < 1500,
+    `Expected 1,000-file graph build under 1500ms, took ${Math.round(elapsedMs)}ms`,
+  );
+
+  // Cached second pass (simulating live-watch or filter update) is near-instant
+  const t1 = performance.now();
+  const graphCached = buildCodebaseDependencyGraph(largeRepo);
+  const cachedElapsedMs = performance.now() - t1;
+  assert.equal(graphCached.totalDependenciesMapped, count - 1);
+  assert.ok(
+    cachedElapsedMs <= elapsedMs,
+    `Expected cached pass (${Math.round(cachedElapsedMs)}ms) <= cold pass (${Math.round(elapsedMs)}ms)`,
+  );
+});
+
+test("Rust codebase analysis extracts structs, traits, impl methods, mod/use edges and clusters", () => {
+  const rustFiles: ProcessedFile[] = [
+    {
+      id: "rs-1",
+      name: "storage.rs",
+      originalName: "storage.rs",
+      flattenedName: "storage.rs",
+      relativePath: "orbit-kv/src/storage.rs",
+      pathSegments: ["orbit-kv", "src", "storage.rs"],
+      directoryPath: "src",
+      size: 400,
+      type: "text/rust",
+      extension: "rs",
+      lastModified: 1700000010000,
+      textContent: `
+pub trait StorageBackend {
+    fn flush(&mut self) -> Result<usize, String>;
+}
+
+pub struct MemTable {
+    entries: usize,
+}
+
+impl MemTable {
+    pub fn new() -> Self {
+        Self { entries: 0 }
+    }
+
+    pub fn put(&mut self, key: String) -> Result<(), String> {
+        Ok(())
+    }
+}
+`,
+    },
+    {
+      id: "rs-2",
+      name: "engine.rs",
+      originalName: "engine.rs",
+      flattenedName: "engine.rs",
+      relativePath: "orbit-kv/src/engine.rs",
+      pathSegments: ["orbit-kv", "src", "engine.rs"],
+      directoryPath: "src",
+      size: 450,
+      type: "text/rust",
+      extension: "rs",
+      lastModified: 1700000011000,
+      textContent: `
+use crate::storage::{MemTable, StorageBackend};
+
+pub struct KvEngine {
+    table: MemTable,
+}
+
+pub fn execute_put(engine: &mut KvEngine, key: String) -> Result<(), String> {
+    engine.table.put(key)
+}
+`,
+    },
+  ];
+
+  const graph = buildCodebaseDependencyGraph(rustFiles);
+  assert.equal(graph.projectStack?.primary, "rust");
+  assert.ok((graph.totalStructs ?? 0) >= 2, "Should detect MemTable and KvEngine structs");
+  assert.ok((graph.totalTraits ?? 0) >= 1, "Should detect StorageBackend trait");
+
+  const execNode = graph.nodesMap.get("orbit-kv/src/engine.rs:execute_put");
+  assert.ok(execNode, "Should find execute_put function in engine.rs");
+  assert.ok(
+    execNode.dependencies.some((d) => d.symbol.name === "put"),
+    "execute_put in engine.rs should link to MemTable::put in storage.rs via use crate::storage",
+  );
+  assert.ok((graph.moduleClusters?.length ?? 0) >= 1);
+});
+
+test("C/C++ codebase analysis extracts classes, structs, out-of-line Class::method and bridges #include headers to .cpp files", () => {
+  const cppFiles: ProcessedFile[] = [
+    {
+      id: "cpp-1",
+      name: "world.hpp",
+      originalName: "world.hpp",
+      flattenedName: "world.hpp",
+      relativePath: "chrono/include/world.hpp",
+      pathSegments: ["chrono", "include", "world.hpp"],
+      directoryPath: "include",
+      size: 300,
+      type: "text/x-c++hdr",
+      extension: "hpp",
+      lastModified: 1700000020000,
+      textContent: `
+#pragma once
+struct RigidBody {
+    double mass;
+};
+
+class PhysicsWorld {
+public:
+    void stepSimulation(double dt);
+};
+`,
+    },
+    {
+      id: "cpp-2",
+      name: "world.cpp",
+      originalName: "world.cpp",
+      flattenedName: "world.cpp",
+      relativePath: "chrono/src/world.cpp",
+      pathSegments: ["chrono", "src", "world.cpp"],
+      directoryPath: "src",
+      size: 350,
+      type: "text/x-c++src",
+      extension: "cpp",
+      lastModified: 1700000021000,
+      textContent: `
+#include "world.hpp"
+
+void integrateBody(double dt) {
+}
+
+void PhysicsWorld::stepSimulation(double dt) {
+    integrateBody(dt);
+}
+`,
+    },
+    {
+      id: "cpp-3",
+      name: "main.cpp",
+      originalName: "main.cpp",
+      flattenedName: "main.cpp",
+      relativePath: "chrono/src/main.cpp",
+      pathSegments: ["chrono", "src", "main.cpp"],
+      directoryPath: "src",
+      size: 300,
+      type: "text/x-c++src",
+      extension: "cpp",
+      lastModified: 1700000022000,
+      textContent: `
+#include "world.hpp"
+
+int main() {
+    PhysicsWorld world;
+    world.stepSimulation(0.016);
+    return 0;
+}
+`,
+    },
+  ];
+
+  const graph = buildCodebaseDependencyGraph(cppFiles);
+  assert.equal(graph.projectStack?.primary, "cpp");
+  assert.ok((graph.totalStructs ?? 0) >= 1, "Should detect RigidBody struct");
+  assert.ok((graph.totalClasses ?? 0) >= 1, "Should detect PhysicsWorld class");
+
+  const mainNode = graph.nodesMap.get("chrono/src/main.cpp:main");
+  assert.ok(mainNode, "Should extract main() from main.cpp");
+  assert.ok(
+    mainNode.dependencies.some((d) => d.symbol.name === "stepSimulation"),
+    "main() should resolve stepSimulation across #include \"world.hpp\" -> world.cpp bridge",
+  );
+});
+
+

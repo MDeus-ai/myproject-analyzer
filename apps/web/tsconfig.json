@@ -1,4 +1,5 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
     "experimentalDecorators": true,
@@ -17,9 +18,20 @@
     "allowJs": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"],
+      "react": ["../../packages/ui/node_modules/@types/react"],
+      "react/*": ["../../packages/ui/node_modules/@types/react/*"],
+      "react-dom": ["../../packages/ui/node_modules/@types/react-dom"],
+      "react-dom/*": ["../../packages/ui/node_modules/@types/react-dom/*"],
+      "@myproject/core": ["../../packages/core/src/index.ts"],
+      "@myproject/core/*": ["../../packages/core/src/*"],
+      "@myproject/platform": ["../../packages/platform/src/index.ts"],
+      "@myproject/platform/*": ["../../packages/platform/src/*"],
+      "@myproject/platform-web": ["../../packages/platform-web/src/index.ts"],
+      "@myproject/platform-electron": ["../../packages/platform-electron/src/index.ts"],
+      "@myproject/rust-engine": ["../../packages/rust-engine/src/index.ts"],
+      "@myproject/ui": ["../../packages/ui/src/index.ts"],
+      "@myproject/ui/*": ["../../packages/ui/src/*"]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true

@@ -18,16 +18,22 @@ jobs:
           node-version: 20
           cache: npm
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Install (all workspaces)
         run: npm ci
+
+      - name: Rust engine unit tests (cargo test)
+        run: cargo test --manifest-path packages/rust-engine/Cargo.toml
 
       - name: Core test suite
         run: npm test
 
-      - name: Desktop + bridge test suites
+      - name: Desktop + bridge + rust-engine test suites
         run: |
           npm test -w @myproject/desktop
           npm test -w @myproject/platform-electron
+          npm test -w @myproject/rust-engine
 
       - name: Typecheck all packages
         run: npm run typecheck

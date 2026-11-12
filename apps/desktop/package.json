@@ -10,12 +10,13 @@
     "build": "node scripts/build.mjs",
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/fs-walk.test.ts src/watch-batcher.test.ts src/watch-filter.test.ts src/apply-plan.test.ts src/window-state.test.ts src/external-url.test.ts src/security-invariants.test.ts",
+    "test": "tsx --test src/fs-walk.test.ts src/watch-batcher.test.ts src/watch-filter.test.ts src/apply-plan.test.ts src/window-state.test.ts src/external-url.test.ts src/asset-protocol.test.ts src/rust-engine.test.ts src/security-invariants.test.ts",
     "prepackage": "node scripts/prepackage.mjs",
     "dist": "npm run build && npm run prepackage && electron-builder"
   },
   "devDependencies": {
     "@myproject/platform": "*",
+    "@myproject/rust-engine": "*",
     "@types/node": "^22.20.5",
     "electron": "45.3.0",
     "electron-builder": "^26.0.12",

@@ -1,6 +1,6 @@
-
 import React, { useMemo } from "react";
 import type { AnalyzerStyle } from "@myproject/core/codeAnalyzer";
+import { HighlightedLine } from "./CodeSyntaxHighlighter";
 
 /**
  * Presentational highlighter for the combined CodeFile Analyzer output.
@@ -54,7 +54,10 @@ const JSON_TOP_KEYS = new Set([
 const JSON_STRUCTURAL = new Set(["{", "}", "[", "]", "},", "],"]);
 
 /** Above this many lines the highlighter falls back to plain rendering. */
-const MAX_HIGHLIGHT_LINES = 12000;
+const MAX_HIGHLIGHT_LINES = 2500;
+/** Cap the DOM preview text so multi-MB archives never freeze browser layout on tab switch.
+ *  Copy & Download always use the complete, untruncated archive string. */
+const MAX_PREVIEW_CHARS = 240_000;
 
 function span(cls: string, text: string): React.ReactNode {
   return <span className={cls}>{text}</span>;
@@ -146,7 +149,7 @@ function renderJsonl(lines: string[]): React.ReactNode[] {
   return nodes;
 }
 
-/** Compact: cyan path headers, plain code bodies. */
+/** Compact: cyan path headers, syntax-colored code bodies. */
 function renderCompact(lines: string[]): React.ReactNode[] {
   return lines.map((line, i) => {
     const match = line.match(COMPACT_HEADER_RE);
@@ -159,7 +162,7 @@ function renderCompact(lines: string[]): React.ReactNode[] {
             {span("text-slate-600", " ----")}
           </>
         ) : (
-          span("text-slate-300", line)
+          <HighlightedLine line={line} />
         )}
         {"\n"}
       </React.Fragment>
@@ -365,19 +368,19 @@ function renderStructured(lines: string[]): React.ReactNode[] {
       continue;
     }
 
-    // Code body (with optional dimmed line-number gutter)
+    // Code body (with optional dimmed line-number gutter + syntax coloring)
     if (inCode || inFence || inXml) {
       const ln = inCode ? line.match(LINE_NO_RE) : null;
       if (ln) {
         push(
           <>
             {span("text-slate-600", ln[1])}
-            {span("text-slate-300", ln[2])}
+            <HighlightedLine line={ln[2]} />
           </>,
           i,
         );
       } else {
-        push(span("text-slate-300", line), i);
+        push(<HighlightedLine line={line} />, i);
       }
       continue;
     }
@@ -393,21 +396,38 @@ export const AnalyzerTextPreview: React.FC<{
   text: string;
   format?: AnalyzerStyle;
 }> = ({ text, format }) => {
+  const isTruncatedForPreview = text.length > MAX_PREVIEW_CHARS;
+  const previewText = useMemo(
+    () => (isTruncatedForPreview ? text.slice(0, MAX_PREVIEW_CHARS) : text),
+    [text, isTruncatedForPreview],
+  );
+
   const rendered = useMemo<React.ReactNode[] | null>(() => {
-    const lines = text.split("\n");
+    if (isTruncatedForPreview) return null;
+    const lines = previewText.split("\n");
     if (lines.length > MAX_HIGHLIGHT_LINES) return null;
 
     if (format === "json") return renderJson(lines);
     if (format === "jsonl") return renderJsonl(lines);
     if (format === "compact") return renderCompact(lines);
     return renderStructured(lines);
-  }, [text, format]);
+  }, [previewText, isTruncatedForPreview, format]);
 
   if (rendered === null) {
     return (
-      <pre className="font-mono text-xs text-slate-200 leading-relaxed whitespace-pre-wrap break-all">
-        {text}
-      </pre>
+      <>
+        <pre className="font-mono text-xs text-slate-200 leading-relaxed whitespace-pre-wrap break-all">
+          {previewText}
+        </pre>
+        {isTruncatedForPreview && (
+          <div className="mt-3 px-3 py-2 rounded-lg surface-raised border border-subtle text-xs text-slate-400 font-sans">
+            Showing first {(MAX_PREVIEW_CHARS / 1000).toFixed(0)} KB of{" "}
+            {(text.length / 1000).toFixed(0)} KB in live preview to keep
+            navigation instant — <strong>Copy</strong> and{" "}
+            <strong>Download</strong> include the complete archive.
+          </div>
+        )}
+      </>
     );
   }
 
@@ -417,4 +437,5 @@ export const AnalyzerTextPreview: React.FC<{
     </pre>
   );
 };
+
 

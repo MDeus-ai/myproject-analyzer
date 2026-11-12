@@ -23,28 +23,26 @@ import {
   combineMultipleCodeFiles,
   countLines,
   estimateTokens,
+  estimateCombinedTokensByStyle,
   getRelativePathFromRoot,
   isLockfile,
   AnalyzerStyle,
 } from "@myproject/core/codeAnalyzer";
 import { formatBytes } from "@myproject/core/fileHelpers";
-import { triggerFileDownload } from "@myproject/core/zipExporter";
 import { copyToClipboard } from "@myproject/core/clipboard";
 import {
   isSecretFile,
   getSecretWarning,
 } from "@myproject/core/secretsDetector";
+import { getPlatform } from "@myproject/platform";
 import { AnalyzerTextPreview } from "./AnalyzerTextPreview";
+import { useDebouncedValue } from "./useDebouncedValue";
 import { useVirtualRows } from "./useVirtualRows";
 
 interface CodeAnalyzerViewProps {
   files: ProcessedFile[];
   rootFolderName: string;
 }
-
-/** Above this combined content size, only the active format is generated
- *  (avoids holding 6 multi-MB strings in memory at once). */
-const MAX_MULTI_FORMAT_CHARS = 6_000_000;
 
 const FORMAT_META: Record<
   AnalyzerStyle,
@@ -148,6 +146,7 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
   });
 
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(searchQuery, 120);
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("all");
   const [formatStyle, setFormatStyle] = useState<AnalyzerStyle>("standard");
   const [includeLineNumbers, setIncludeLineNumbers] = useState(false);
@@ -167,16 +166,18 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
   }, [analyzedFiles]);
 
   const filteredFiles = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
     return analyzedFiles.filter((f) => {
       const matchesSearch =
-        f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.locationFromRoot.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.meta.fileType.toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        f.name.toLowerCase().includes(q) ||
+        f.locationFromRoot.toLowerCase().includes(q) ||
+        f.meta.fileType.toLowerCase().includes(q);
       if (!matchesSearch) return false;
       if (selectedTypeFilter === "all") return true;
       return f.meta.fileType.toLowerCase() === selectedTypeFilter.toLowerCase();
     });
-  }, [analyzedFiles, searchQuery, selectedTypeFilter]);
+  }, [analyzedFiles, debouncedQuery, selectedTypeFilter]);
 
   // Virtualized file list — same reasoning as FlatFilesView.
   const {
@@ -191,7 +192,7 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
   useEffect(() => {
     listRef.current?.scrollTo({ top: 0 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, selectedTypeFilter]);
+  }, [debouncedQuery, selectedTypeFilter]);
 
   const availableTypes = useMemo(() => {
     const types = new Set<string>();
@@ -211,55 +212,45 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
     return selectedFiles.filter((f) => isSecretFile(f.name)).map((f) => f.name);
   }, [selectedFiles]);
 
-  const totalSelectedChars = useMemo(
-    () =>
-      selectedFiles.reduce((acc, f) => acc + (f.textContent?.length || 0), 0),
-    [selectedFiles],
-  );
-
-  // Generate the combined output. For reasonably sized selections we build
-  // every format at once so switching formats is instant and the picker can
-  // show live token estimates per format. For very large bundles we only
-  // build the active format.
-  const combinedByFormat = useMemo(() => {
-    if (selectedFiles.length === 0) return null;
-    const styles =
-      totalSelectedChars > MAX_MULTI_FORMAT_CHARS
-        ? [formatStyle]
-        : FORMAT_ORDER;
-    const out = {} as Record<AnalyzerStyle, string>;
-    for (const style of styles) {
-      out[style] = combineMultipleCodeFiles(selectedFiles, {
-        style,
-        includeLineNumbers,
-        rootFolderName,
-        addTableOfContents,
-      });
+  // Only build the ACTIVE format string synchronously on render — building all
+  // 6 multi-MB format strings simultaneously was a major cause of tab-switch lag.
+  const combinedText = useMemo(() => {
+    if (selectedFiles.length === 0) {
+      return "No files selected. Please select one or more files from the left panel.";
     }
-    return out;
+    return combineMultipleCodeFiles(selectedFiles, {
+      style: formatStyle,
+      includeLineNumbers,
+      rootFolderName,
+      addTableOfContents,
+    });
   }, [
     selectedFiles,
-    totalSelectedChars,
     formatStyle,
     includeLineNumbers,
     rootFolderName,
     addTableOfContents,
   ]);
 
-  const combinedText =
-    combinedByFormat?.[formatStyle] ??
-    "No files selected. Please select one or more files from the left panel.";
-
+  // O(files) token estimates across all 6 format buttons without allocating
+  // 5 unused multi-megabyte strings.
   const tokenEstimates = useMemo(() => {
-    if (!combinedByFormat) return null;
-    const out = {} as Partial<Record<AnalyzerStyle, number>>;
-    for (const style of FORMAT_ORDER) {
-      if (combinedByFormat[style] !== undefined) {
-        out[style] = estimateTokens(combinedByFormat[style]);
-      }
-    }
-    return out;
-  }, [combinedByFormat]);
+    if (selectedFiles.length === 0) return null;
+    const est = estimateCombinedTokensByStyle(selectedFiles, {
+      includeLineNumbers,
+      rootFolderName,
+      addTableOfContents,
+    });
+    est[formatStyle] = estimateTokens(combinedText);
+    return est;
+  }, [
+    selectedFiles,
+    includeLineNumbers,
+    rootFolderName,
+    addTableOfContents,
+    formatStyle,
+    combinedText,
+  ]);
 
   const compactSavings = useMemo(() => {
     const standard = tokenEstimates?.standard;
@@ -317,7 +308,10 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
     const safeName =
       rootFolderName.replace(/[^a-zA-Z0-9_-]/g, "_") || "codebase";
     const blob = new Blob([combinedText], { type: meta.mime });
-    triggerFileDownload(blob, `${safeName}_codefile_analysis.${meta.ext}`);
+    void getPlatform().saveBlob(
+      blob,
+      `${safeName}_codefile_analysis.${meta.ext}`,
+    );
   };
 
   const handleDownloadSingleFile = (file: ProcessedFile) => {
@@ -329,7 +323,7 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
     });
     const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
     const blob = new Blob([singleText], { type: meta.mime });
-    triggerFileDownload(blob, `${safeName}_analysis.${meta.ext}`);
+    void getPlatform().saveBlob(blob, `${safeName}_analysis.${meta.ext}`);
   };
 
   const formatTooltip = (style: AnalyzerStyle): string => {

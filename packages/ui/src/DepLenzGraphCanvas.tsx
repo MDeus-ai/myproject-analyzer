@@ -16,8 +16,10 @@ import {
   Map as MapIcon,
   Pause,
   Play,
+  Folder,
 } from "lucide-react";
 import type { SymbolKind } from "@myproject/core/depLenz";
+import { ThemedDropdown, ThemedDropdownOption } from "./ThemedDropdown";
 
 type Analysis = ReturnType<
   typeof import("@myproject/core/depLenz").buildCodebaseDependencyGraph
@@ -52,6 +54,8 @@ interface MapNode {
   name: string;
   kind: NodeKind;
   fileName: string;
+  filePath: string;
+  moduleName: string;
   lineStart: number;
   layer: number;
   x: number;
@@ -69,6 +73,7 @@ interface GraphLayout {
   nodes: MapNode[];
   nodeById: Map<string, MapNode>;
   edges: MapEdge[];
+  edgesByNode: Map<string, MapEdge[]>;
   totalSymbols: number;
   trimmed: boolean;
   adjacency: Map<string, Set<string>>;
@@ -79,25 +84,64 @@ interface XY {
   y: number;
 }
 
+interface EdgeDomHandles {
+  base: SVGPathElement | null;
+  flow: SVGPathElement | null;
+  port: SVGCircleElement | null;
+}
+
 function truncateMiddle(text: string, max: number): string {
   if (text.length <= max) return text;
   const keep = Math.max(4, Math.floor((max - 1) / 2));
   return `${text.slice(0, keep)}…${text.slice(-keep)}`;
 }
 
-/**
- * Short glyphs for the kind chip. Partial on purpose: SymbolKind may
- * include kinds beyond the common four (it does — e.g. "method"), and
- * any kind without a glyph falls back to the first characters of its
- * name. This record therefore never needs to be exhaustive and can't
- * produce a TS2741 again, no matter how SymbolKind evolves.
- */
+function inferModuleClusterLabel(filePath: string): string {
+  const parts = filePath.replace(/\\/g, "/").split("/").filter(Boolean);
+  if (parts.length <= 1) return "root";
+  if (parts[0] === "src" || parts[0] === "include") {
+    if (parts.length >= 3) return `${parts[0]}/${parts[1]}`;
+    return parts[0];
+  }
+  if (
+    (parts[0] === "packages" ||
+      parts[0] === "apps" ||
+      parts[0] === "crates") &&
+    parts.length >= 2
+  ) {
+    return `${parts[0]}/${parts[1]}`;
+  }
+  return parts.slice(0, Math.min(2, parts.length - 1)).join("/");
+}
+
+/** Computes the SVG cubic-bezier path `d` and port coordinates for an edge. */
+function computeEdgeGeometry(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+): { d: string; x2: number; y2: number } {
+  const forward = tx + NODE_W / 2 >= sx + NODE_W / 2;
+  const x1 = forward ? sx + NODE_W : sx;
+  const y1 = sy + NODE_H / 2;
+  const x2 = forward ? tx : tx + NODE_W;
+  const y2 = ty + NODE_H / 2;
+  const dir = forward ? 1 : -1;
+  const bend = Math.min(150, Math.max(44, Math.abs(x2 - x1) * 0.55));
+  const d = `M ${x1} ${y1} C ${x1 + dir * bend} ${y1}, ${
+    x2 - dir * bend
+  } ${y2}, ${x2} ${y2}`;
+  return { d, x2, y2 };
+}
+
 const KIND_GLYPHS: Partial<Record<NodeKind, string>> = {
   component: "UI",
   function: "fn",
   hook: "use",
   class: "cls",
   method: "m",
+  struct: "st",
+  trait: "tr",
   package: "pkg",
 };
 
@@ -105,15 +149,7 @@ const kindGlyphFor = (kind: NodeKind): string =>
   KIND_GLYPHS[kind] ?? kind.slice(0, 4);
 
 /**
- * Layered ("Sugiyama-lite") auto layout:
- *  1. column = longest-path depth from a root (roots = symbols with no
- *     visible callers; external packages pinned to column 0)
- *  2. order nodes inside each column by barycenter of already-placed
- *     neighbors (two sweeps — cheap crossing reduction)
- *  3. assign x/y from column + row
- *
- * The layout only supplies the INITIAL position — the user can drag any
- * node anywhere afterwards (manual positions win over layout positions).
+ * Layered ("Sugiyama-lite") auto layout with strict node-ID deduplication.
  */
 function buildGraphLayout(
   analysis: Analysis,
@@ -121,8 +157,14 @@ function buildGraphLayout(
   kind: "all" | SymbolKind,
   includePackages: boolean,
 ): GraphLayout {
-  // ---- 1. visible symbol set -------------------------------------------
-  let symbols = analysis.symbols;
+  // ---- 1. visible symbol set (strictly deduplicated by id) --------------
+  const seenIds = new Set<string>();
+  let symbols = analysis.symbols.filter((s) => {
+    if (!s || !s.id || seenIds.has(s.id)) return false;
+    seenIds.add(s.id);
+    return true;
+  });
+
   if (folder !== "all") {
     const prefix = folder.endsWith("/") ? folder : `${folder}/`;
     symbols = symbols.filter(
@@ -136,9 +178,8 @@ function buildGraphLayout(
   const totalSymbols = symbols.length;
   let trimmed = false;
 
-  // Pre-compute full-graph degree so trimming keeps the useful hubs.
   const fullDegree = new Map<string, number>();
-  for (const s of analysis.symbols) {
+  for (const s of symbols) {
     const node = analysis.nodesMap.get(s.id);
     fullDegree.set(
       s.id,
@@ -186,7 +227,7 @@ function buildGraphLayout(
   const computeLayer = (id: string, stack: Set<string>): number => {
     const memo = layerMemo.get(id);
     if (memo !== undefined) return memo;
-    if (stack.has(id)) return 0; // cycle guard
+    if (stack.has(id)) return 0;
     stack.add(id);
     let max = -1;
     for (const pred of inEdges.get(id) ?? []) {
@@ -210,7 +251,12 @@ function buildGraphLayout(
   const rowOf = new Map<string, number>();
   const orderColumn = (ids: string[], getBary: (id: string) => number) => {
     ids.sort((a, b) => {
+      const modA = inferModuleClusterLabel(visible.get(a)!.filePath);
+      const modB = inferModuleClusterLabel(visible.get(b)!.filePath);
       const d = getBary(a) - getBary(b);
+      if (Math.abs(d) > 0.75) return d;
+      const modCmp = modA.localeCompare(modB);
+      if (modCmp !== 0) return modCmp;
       if (d !== 0) return d;
       return (visible.get(a)!.name || "").localeCompare(
         visible.get(b)!.name || "",
@@ -247,7 +293,7 @@ function buildGraphLayout(
     }
   }
 
-  // ---- 5. external npm packages pinned to column -1 ----------------------
+  // ---- 5. external packages / crates / headers pinned to column -1 ------
   const pkgNames: string[] = [];
   if (includePackages) {
     const pkgSet = new Set<string>();
@@ -265,6 +311,7 @@ function buildGraphLayout(
 
   for (const l of sortedLayers) {
     for (const id of columns.get(l)!) {
+      if (nodeById.has(id)) continue;
       const s = visible.get(id)!;
       const row = rowOf.get(id) ?? 0;
       const node: MapNode = {
@@ -272,6 +319,8 @@ function buildGraphLayout(
         name: s.name,
         kind: s.kind,
         fileName: s.fileName,
+        filePath: s.filePath,
+        moduleName: inferModuleClusterLabel(s.filePath),
         lineStart: s.lineStart,
         layer: l,
         x: PAD_X + (l + xOffset) * COL_GAP,
@@ -287,11 +336,14 @@ function buildGraphLayout(
   const pkgById = new Map<string, MapNode>();
   pkgNames.forEach((pkg, i) => {
     const id = `pkg:${pkg}`;
+    if (nodeById.has(id)) return;
     const node: MapNode = {
       id,
       name: pkg,
       kind: "package",
-      fileName: "npm package",
+      fileName: "external dependency",
+      filePath: pkg,
+      moduleName: "external",
       lineStart: 0,
       layer: -1,
       x: PAD_X,
@@ -303,7 +355,6 @@ function buildGraphLayout(
     pkgById.set(pkg, node);
   });
 
-  // Package edges (package -> importer), drawn dotted.
   if (includePackages) {
     for (const s of symbols) {
       const node = analysis.nodesMap.get(s.id);
@@ -319,47 +370,68 @@ function buildGraphLayout(
     }
   }
 
-  // ---- 7. adjacency for hover/selection highlighting ----------------------
+  // ---- 7. adjacency & per-node edge index -------------------------------
   const adjacency = new Map<string, Set<string>>();
+  const edgesByNode = new Map<string, MapEdge[]>();
   const touch = (a: string, b: string) => {
     if (!adjacency.has(a)) adjacency.set(a, new Set());
     adjacency.get(a)!.add(b);
   };
+  const registerNodeEdge = (nodeId: string, edge: MapEdge) => {
+    const list = edgesByNode.get(nodeId);
+    if (list) list.push(edge);
+    else edgesByNode.set(nodeId, [edge]);
+  };
   for (const e of edges) {
     touch(e.source, e.target);
     touch(e.target, e.source);
+    registerNodeEdge(e.source, e);
+    registerNodeEdge(e.target, e);
   }
 
-  return { nodes, nodeById, edges, totalSymbols, trimmed, adjacency };
+  return {
+    nodes,
+    nodeById,
+    edges,
+    edgesByNode,
+    totalSymbols,
+    trimmed,
+    adjacency,
+  };
 }
 
 /* ------------------------------------------------------------------ */
-/* Memoized edge — direction is conveyed by animated flow dots that    */
-/* travel caller → callee, plus a filled "port" dot where the edge      */
-/* plugs into the callee. No arrowheads.                               */
+/* Memoized edge — registers DOM handles for zero-re-render dragging   */
 /* ------------------------------------------------------------------ */
 
 interface GraphEdgeProps {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  forward: boolean;
+  id: string;
+  sx: number;
+  sy: number;
+  tx: number;
+  ty: number;
   hot: boolean;
   dimmed: boolean;
   dotted: boolean;
+  registerEdgeEl: (id: string, handles: EdgeDomHandles | null) => void;
 }
 
 const GraphEdge = React.memo<GraphEdgeProps>(
-  ({ x1, y1, x2, y2, forward, hot, dimmed, dotted }) => {
-    // Horizontal-tangent cubic: exits the side of the source, enters the
-    // facing side of the target. The endpoint lands exactly on the box
-    // border, where the port dot sits.
-    const dir = forward ? 1 : -1;
-    const bend = Math.min(150, Math.max(44, Math.abs(x2 - x1) * 0.55));
-    const d = `M ${x1} ${y1} C ${x1 + dir * bend} ${y1}, ${
-      x2 - dir * bend
-    } ${y2}, ${x2} ${y2}`;
+  ({ id, sx, sy, tx, ty, hot, dimmed, dotted, registerEdgeEl }) => {
+    const baseRef = useRef<SVGPathElement>(null);
+    const flowRef = useRef<SVGPathElement>(null);
+    const portRef = useRef<SVGCircleElement>(null);
+
+    useEffect(() => {
+      registerEdgeEl(id, {
+        base: baseRef.current,
+        flow: flowRef.current,
+        port: portRef.current,
+      });
+      return () => registerEdgeEl(id, null);
+    }, [id, registerEdgeEl]);
+
+    const { d, x2, y2 } = computeEdgeGeometry(sx, sy, tx, ty);
 
     const baseCls = `dlc-edge${dotted ? " dlc-edge-pkg" : ""}${
       hot ? " dlc-edge-hot" : ""
@@ -373,12 +445,15 @@ const GraphEdge = React.memo<GraphEdgeProps>(
 
     return (
       <>
-        <path d={d} className={baseCls} fill="none" />
-        {/* Flow dots: always on (subtle at rest, strong when hot) — they
-            march from the caller toward the callee, showing direction. */}
-        <path d={d} className={flowCls} fill="none" />
-        {/* Port: the edge "plugs into" the callee here. */}
-        <circle cx={x2} cy={y2} r={hot ? 3.4 : 2.5} className={portCls} />
+        <path ref={baseRef} d={d} className={baseCls} fill="none" />
+        <path ref={flowRef} d={d} className={flowCls} fill="none" />
+        <circle
+          ref={portRef}
+          cx={x2}
+          cy={y2}
+          r={hot ? 3.4 : 2.5}
+          className={portCls}
+        />
       </>
     );
   },
@@ -386,7 +461,7 @@ const GraphEdge = React.memo<GraphEdgeProps>(
 GraphEdge.displayName = "GraphEdge";
 
 /* ------------------------------------------------------------------ */
-/* Memoized node                                                       */
+/* Memoized node — registers <g> handle for direct SVG drag transform  */
 /* ------------------------------------------------------------------ */
 
 interface GraphNodeProps {
@@ -403,9 +478,8 @@ interface GraphNodeProps {
   active: boolean;
   dimmed: boolean;
   dragging: boolean;
+  registerNodeEl: (id: string, el: SVGGElement | null) => void;
   onDown: (id: string, e: React.PointerEvent) => void;
-  onMove: (id: string, e: React.PointerEvent) => void;
-  onUp: (id: string, e: React.PointerEvent) => void;
   onEnter: (id: string) => void;
   onLeave: (id: string) => void;
   onFocus: (id: string) => void;
@@ -426,88 +500,95 @@ const GraphNode = React.memo<GraphNodeProps>(
     active,
     dimmed,
     dragging,
+    registerNodeEl,
     onDown,
-    onMove,
-    onUp,
     onEnter,
     onLeave,
     onFocus,
-  }) => (
-    <g
-      transform={`translate(${x}, ${y})`}
-      className={`dlc-node ${kindCls}${dimmed ? " dlc-dimmed" : ""}${
-        active ? " dlc-node-active" : ""
-      }${selected ? " dlc-node-selected" : ""}${
-        dragging ? " dlc-node-dragging" : ""
-      }`}
-      onPointerDown={(e) => onDown(id, e)}
-      onPointerMove={(e) => onMove(id, e)}
-      onPointerUp={(e) => onUp(id, e)}
-      onPointerEnter={() => onEnter(id)}
-      onPointerLeave={() => onLeave(id)}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        if (!isPackage) onFocus(id);
-      }}
-    >
-      <title>
-        {isPackage ? `${name} (external npm package)` : `${name} — ${sub}`}
-      </title>
+  }) => {
+    const gRef = useRef<SVGGElement>(null);
 
-      {/* Selection glow */}
-      {selected && (
+    useEffect(() => {
+      registerNodeEl(id, gRef.current);
+      return () => registerNodeEl(id, null);
+    }, [id, registerNodeEl]);
+
+    return (
+      <g
+        ref={gRef}
+        transform={`translate(${x}, ${y})`}
+        className={`dlc-node ${kindCls}${dimmed ? " dlc-dimmed" : ""}${
+          active ? " dlc-node-active" : ""
+        }${selected ? " dlc-node-selected" : ""}${
+          dragging ? " dlc-node-dragging" : ""
+        }`}
+        onPointerDown={(e) => onDown(id, e)}
+        onPointerEnter={() => onEnter(id)}
+        onPointerLeave={() => onLeave(id)}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          if (!isPackage) onFocus(id);
+        }}
+      >
+        <title>
+          {isPackage ? `${name} (external dependency)` : `${name} — ${sub}`}
+        </title>
+
+        {/* Selection glow */}
+        {selected && (
+          <rect
+            x={-4}
+            y={-4}
+            width={NODE_W + 8}
+            height={NODE_H + 8}
+            rx={15}
+            className="dlc-node-glow"
+          />
+        )}
+
+        {/* Fake drop shadow */}
         <rect
-          x={-4}
-          y={-4}
-          width={NODE_W + 8}
-          height={NODE_H + 8}
-          rx={15}
-          className="dlc-node-glow"
+          x={0}
+          y={3}
+          width={NODE_W}
+          height={NODE_H}
+          rx={12}
+          className="dlc-node-shadow"
         />
-      )}
 
-      {/* Fake drop shadow (cheaper than an SVG filter during pan/drag) */}
-      <rect
-        x={0}
-        y={3}
-        width={NODE_W}
-        height={NODE_H}
-        rx={12}
-        className="dlc-node-shadow"
-      />
+        {/* Body */}
+        <rect width={NODE_W} height={NODE_H} rx={12} className="dlc-node-rect" />
 
-      {/* Body */}
-      <rect width={NODE_W} height={NODE_H} rx={12} className="dlc-node-rect" />
+        {/* Kind glyph chip */}
+        <g transform="translate(10, 15)">
+          <rect width={28} height={24} rx={7} className="dlc-chip" />
+          <text x={14} y={16} textAnchor="middle" className="dlc-chip-text">
+            {kindLabel}
+          </text>
+        </g>
 
-      {/* Kind glyph chip */}
-      <g transform="translate(10, 15)">
-        <rect width={28} height={24} rx={7} className="dlc-chip" />
-        <text x={14} y={16} textAnchor="middle" className="dlc-chip-text">
-          {kindLabel}
+        {/* Name + provenance */}
+        <text x={48} y={24} className="dlc-node-name">
+          {truncateMiddle(name, 22)}
         </text>
+        <text x={48} y={41} className="dlc-node-path">
+          {sub}
+        </text>
+
+        {/* Link count, top-right */}
+        {degree > 0 && (
+          <text
+            x={NODE_W - 10}
+            y={15}
+            textAnchor="end"
+            className="dlc-node-links"
+          >
+            {degree}⇄
+          </text>
+        )}
       </g>
-
-      {/* Name + provenance */}
-      <text x={48} y={24} className="dlc-node-name">
-        {truncateMiddle(name, 22)}
-      </text>
-      <text x={48} y={41} className="dlc-node-path">
-        {sub}
-      </text>
-
-      {/* Link count, top-right */}
-      {degree > 0 && (
-        <text
-          x={NODE_W - 10}
-          y={15}
-          textAnchor="end"
-          className="dlc-node-links"
-        >
-          {degree}⇄
-        </text>
-      )}
-    </g>
-  ),
+    );
+  },
 );
 GraphNode.displayName = "GraphNode";
 
@@ -523,6 +604,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
   const [folder, setFolder] = useState<string>("all");
   const [kind, setKind] = useState<"all" | SymbolKind>("all");
   const [includePackages, setIncludePackages] = useState(true);
+  const [showClusters, setShowClusters] = useState(true);
   const [flowPaused, setFlowPaused] = useState(false);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [mapSelectedId, setMapSelectedId] = useState<string | null>(null);
@@ -534,13 +616,36 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
   const [view, setView] = useState({ x: 24, y: 16, k: 0.9 });
   const [panning, setPanning] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
+  const cameraGroupRef = useRef<SVGGElement>(null);
+
+  /* Direct SVG DOM element registries for zero-re-render dragging */
+  const nodeElsRef = useRef(new Map<string, SVGGElement>());
+  const edgeElsRef = useRef(new Map<string, EdgeDomHandles>());
+  const livePosRef = useRef(new Map<string, XY>());
+  const hoverRafRef = useRef<number>(0);
+
+  const registerNodeEl = useCallback((id: string, el: SVGGElement | null) => {
+    if (el) nodeElsRef.current.set(id, el);
+    else nodeElsRef.current.delete(id);
+  }, []);
+
+  const registerEdgeEl = useCallback(
+    (id: string, handles: EdgeDomHandles | null) => {
+      if (handles) edgeElsRef.current.set(id, handles);
+      else edgeElsRef.current.delete(id);
+    },
+    [],
+  );
 
   const panRef = useRef<{
     startX: number;
     startY: number;
     origX: number;
     origY: number;
+    nextX: number;
+    nextY: number;
     moved: boolean;
+    raf: number;
   } | null>(null);
 
   const nodeDragRef = useRef<{
@@ -566,14 +671,12 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     [analysis, folder, kind, includePackages],
   );
 
-  /* ----- refs mirror (stable callbacks read current values) ---------- */
   const viewRef = useRef(view);
   viewRef.current = view;
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
 
-  // Effective node list = layout positions overridden by manual drags.
-  // Unmoved nodes keep object identity so GraphNode memoization holds.
+  // Effective node list = layout positions overridden by committed manual drags.
   const effNodes = useMemo(
     () =>
       layout.nodes.map((n) => {
@@ -588,16 +691,62 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
   );
   const effNodesRef = useRef(effNodes);
   effNodesRef.current = effNodes;
+  const effNodesByIdRef = useRef(effNodesById);
+  effNodesByIdRef.current = effNodesById;
 
-  // ------------------------------------------------------------------
-  // Stable fingerprint of the node SET. Analysis rebuilds that produce
-  // the same nodes (live-watch reparses, engine swaps) must NOT reset
-  // the camera, selection, or interaction state — only an actual change
-  // in which nodes exist (project load, folder/kind filter, trim set)
-  // may do that. Was: everything keyed on [layout], which is a fresh
-  // object after every analysis, so every disk save yanked the camera
-  // back to "fit" and cleared the traced selection.
-  // ------------------------------------------------------------------
+  // Keep livePosRef synchronized with committed positions
+  useEffect(() => {
+    const map = new Map<string, XY>();
+    for (const n of effNodes) {
+      map.set(n.id, { x: n.x, y: n.y });
+    }
+    livePosRef.current = map;
+  }, [effNodes]);
+
+  // Compute module cluster bounding boxes from committed effNodes
+  const clusterBoxes = useMemo(() => {
+    if (!showClusters) return [];
+    const groups = new Map<string, MapNode[]>();
+    for (const n of effNodes) {
+      if (n.kind === "package") continue;
+      const key = n.moduleName || "root";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(n);
+    }
+    const boxes: Array<{
+      id: string;
+      label: string;
+      count: number;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    }> = [];
+    for (const [label, list] of groups.entries()) {
+      if (list.length === 0) continue;
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      for (const n of list) {
+        minX = Math.min(minX, n.x);
+        minY = Math.min(minY, n.y);
+        maxX = Math.max(maxX, n.x + NODE_W);
+        maxY = Math.max(maxY, n.y + NODE_H);
+      }
+      boxes.push({
+        id: label,
+        label,
+        count: list.length,
+        x: minX - 16,
+        y: minY - 24,
+        w: maxX - minX + 32,
+        h: maxY - minY + 36,
+      });
+    }
+    return boxes;
+  }, [effNodes, showClusters]);
+
   const structureKey = useMemo(() => {
     const ids = layout.nodes.map((n) => n.id).sort();
     return `${folder}|${kind}|${includePackages}|${ids.join(",")}`;
@@ -605,7 +754,6 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
 
   const fittedKeyRef = useRef<string | null>(null);
 
-  // Reset transient interaction state only when the graph SHAPE changes.
   useEffect(() => {
     setHoverId(null);
     setMapSelectedId(null);
@@ -645,10 +793,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     });
   }, []);
 
-  // Fit only when the node set changes; same-set rebuilds keep the camera.
   useEffect(() => {
-    // Prune manual positions whose node no longer exists (cheap — safe to
-    // run on every layout).
     setPositions((prev) => {
       const ids = Object.keys(prev);
       const next: Record<string, XY> = {};
@@ -686,9 +831,6 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     [],
   );
 
-  // React registers onWheel as PASSIVE on the root, so e.preventDefault()
-  // inside a React handler is a no-op and the page scrolls while zooming.
-  // Attach a native non-passive listener instead.
   useEffect(() => {
     const el = svgRef.current;
     if (!el) return;
@@ -714,13 +856,13 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     requestAnimationFrame(fitView);
   };
 
-  /* ----- canvas panning & pinch-to-zoom -------------------------------- */
+  /* ----- canvas panning & pinch-to-zoom (direct DOM matrix during pan) - */
 
   const handleCanvasPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (nodeDragRef.current) return;
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    // Second finger down → switch from pan to pinch.
     if (activePointersRef.current.size === 2) {
       const [a, b] = [...activePointersRef.current.values()];
       pinchRef.current = {
@@ -737,12 +879,16 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
       startY: e.clientY,
       origX: viewRef.current.x,
       origY: viewRef.current.y,
+      nextX: viewRef.current.x,
+      nextY: viewRef.current.y,
       moved: false,
+      raf: 0,
     };
     setPanning(true);
   };
 
   const handleCanvasPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (nodeDragRef.current) return;
     if (activePointersRef.current.has(e.pointerId)) {
       activePointersRef.current.set(e.pointerId, {
         x: e.clientX,
@@ -750,7 +896,6 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
       });
     }
 
-    // Pinch zoom anchored at the midpoint between the two fingers.
     const pinch = pinchRef.current;
     if (pinch && activePointersRef.current.size >= 2) {
       const [a, b] = [...activePointersRef.current.values()];
@@ -778,11 +923,33 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     const dx = e.clientX - d.startX;
     const dy = e.clientY - d.startY;
     if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
-    setView((v) => ({ ...v, x: d.origX + dx, y: d.origY + dy }));
+    d.nextX = d.origX + dx;
+    d.nextY = d.origY + dy;
+
+    if (!d.raf) {
+      d.raf = requestAnimationFrame(() => {
+        d.raf = 0;
+        const cam = cameraGroupRef.current;
+        const k = viewRef.current.k;
+        if (cam) {
+          cam.setAttribute(
+            "transform",
+            `matrix(${k} 0 0 ${k} ${d.nextX} ${d.nextY})`,
+          );
+        }
+      });
+    }
   };
 
   const endPan = () => {
-    panRef.current = null;
+    const d = panRef.current;
+    if (d) {
+      if (d.raf) cancelAnimationFrame(d.raf);
+      const finalX = d.nextX;
+      const finalY = d.nextY;
+      panRef.current = null;
+      setView((v) => ({ ...v, x: finalX, y: finalY }));
+    }
     setPanning(false);
   };
 
@@ -797,27 +964,128 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
   };
 
   const handleCanvasClick = () => {
-    // Ignore the synthetic click fired right after a pinch gesture ends.
     if (Date.now() - lastPinchEndRef.current < 350) return;
     if (!panRef.current?.moved) setMapSelectedId(null);
   };
 
-  /* ----- node dragging (stable callbacks → GraphNode memo holds) ------ */
+  /* ----- High-Speed Direct-DOM Node Dragging (window listeners) ------- */
+
+  const applyDirectNodeTransform = useCallback(
+    (nodeId: string, nx: number, ny: number) => {
+      livePosRef.current.set(nodeId, { x: nx, y: ny });
+
+      const gEl = nodeElsRef.current.get(nodeId);
+      if (gEl) {
+        gEl.setAttribute("transform", `translate(${nx}, ${ny})`);
+      }
+
+      const connectedEdges = layoutRef.current.edgesByNode.get(nodeId);
+      if (!connectedEdges) return;
+
+      for (const edge of connectedEdges) {
+        const handles = edgeElsRef.current.get(edge.id);
+        if (!handles) continue;
+        const sPos =
+          edge.source === nodeId
+            ? { x: nx, y: ny }
+            : (livePosRef.current.get(edge.source) ??
+              effNodesByIdRef.current.get(edge.source));
+        const tPos =
+          edge.target === nodeId
+            ? { x: nx, y: ny }
+            : (livePosRef.current.get(edge.target) ??
+              effNodesByIdRef.current.get(edge.target));
+        if (!sPos || !tPos) continue;
+
+        const { d, x2, y2 } = computeEdgeGeometry(
+          sPos.x,
+          sPos.y,
+          tPos.x,
+          tPos.y,
+        );
+        handles.base?.setAttribute("d", d);
+        handles.flow?.setAttribute("d", d);
+        handles.port?.setAttribute("cx", String(x2));
+        handles.port?.setAttribute("cy", String(y2));
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!dragNodeId) return;
+
+    const handleWindowPointerMove = (e: PointerEvent) => {
+      const d = nodeDragRef.current;
+      if (!d || e.pointerId !== d.pointerId) return;
+      const k = viewRef.current.k || 1;
+      d.nextX = d.origX + (e.clientX - d.startX) / k;
+      d.nextY = d.origY + (e.clientY - d.startY) / k;
+      if (
+        Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) > 3
+      ) {
+        d.moved = true;
+      }
+      if (!d.raf) {
+        d.raf = requestAnimationFrame(() => {
+          const cur = nodeDragRef.current;
+          if (!cur) return;
+          cur.raf = 0;
+          applyDirectNodeTransform(cur.id, cur.nextX, cur.nextY);
+        });
+      }
+    };
+
+    const handleWindowPointerUp = (e: PointerEvent) => {
+      const d = nodeDragRef.current;
+      if (!d || e.pointerId !== d.pointerId) return;
+      if (d.raf) {
+        cancelAnimationFrame(d.raf);
+        d.raf = 0;
+      }
+      const { id, nextX, nextY, moved } = d;
+      nodeDragRef.current = null;
+      applyDirectNodeTransform(id, nextX, nextY);
+      setPositions((prev) => ({
+        ...prev,
+        [id]: { x: nextX, y: nextY },
+      }));
+      setDragNodeId(null);
+
+      if (!moved && e.type === "pointerup") {
+        const isPkg = id.startsWith("pkg:");
+        if (!isPkg) {
+          setMapSelectedId((prev) => (prev === id ? null : id));
+        }
+      }
+    };
+
+    window.addEventListener("pointermove", handleWindowPointerMove, {
+      passive: true,
+    });
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", handleWindowPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+      window.removeEventListener("pointercancel", handleWindowPointerUp);
+    };
+  }, [dragNodeId, applyDirectNodeTransform]);
 
   const onNodeDown = useCallback((id: string, e: React.PointerEvent) => {
     e.stopPropagation();
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-    const node = effNodesRef.current.find((n) => n.id === id);
-    if (!node) return;
+    const pos =
+      livePosRef.current.get(id) ?? effNodesByIdRef.current.get(id);
+    if (!pos) return;
     nodeDragRef.current = {
       id,
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
-      origX: node.x,
-      origY: node.y,
-      nextX: node.x,
-      nextY: node.y,
+      origX: pos.x,
+      origY: pos.y,
+      nextX: pos.x,
+      nextY: pos.y,
       moved: false,
       raf: 0,
     };
@@ -825,51 +1093,28 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     setHoverId(id);
   }, []);
 
-  const onNodeMove = useCallback((id: string, e: React.PointerEvent) => {
-    const d = nodeDragRef.current;
-    if (!d || d.id !== id || e.pointerId !== d.pointerId) return;
-    const k = viewRef.current.k || 1;
-    d.nextX = d.origX + (e.clientX - d.startX) / k;
-    d.nextY = d.origY + (e.clientY - d.startY) / k;
-    if (Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) > 3) {
-      d.moved = true;
-    }
-    if (!d.raf) {
-      d.raf = requestAnimationFrame(() => {
-        d.raf = 0;
-        const { nextX, nextY } = d;
-        setPositions((prev) => ({ ...prev, [id]: { x: nextX, y: nextY } }));
-      });
-    }
-  }, []);
-
-  const onNodeUp = useCallback((id: string, e: React.PointerEvent) => {
-    const d = nodeDragRef.current;
-    if (!d || d.id !== id) return;
-    if (d.raf) {
-      cancelAnimationFrame(d.raf);
-      d.raf = 0;
-      setPositions((prev) => ({
-        ...prev,
-        [id]: { x: d.nextX, y: d.nextY },
-      }));
-    }
-    nodeDragRef.current = null;
-    setDragNodeId(null);
-    setHoverId(null);
-    // A press that never moved is a click → toggle selection.
-    if (!d.moved && e.type === "pointerup") {
-      const isPkg = id.startsWith("pkg:");
-      if (!isPkg) {
-        setMapSelectedId((prev) => (prev === id ? null : id));
+  const onNodeEnter = useCallback((id: string) => {
+    if (nodeDragRef.current || panRef.current) return;
+    if (hoverRafRef.current) cancelAnimationFrame(hoverRafRef.current);
+    hoverRafRef.current = requestAnimationFrame(() => {
+      hoverRafRef.current = 0;
+      if (!nodeDragRef.current && !panRef.current) {
+        setHoverId(id);
       }
-    }
+    });
   }, []);
 
-  const onNodeEnter = useCallback((id: string) => setHoverId(id), []);
   const onNodeLeave = useCallback(() => {
-    if (!nodeDragRef.current) setHoverId(null);
+    if (nodeDragRef.current || panRef.current) return;
+    if (hoverRafRef.current) cancelAnimationFrame(hoverRafRef.current);
+    hoverRafRef.current = requestAnimationFrame(() => {
+      hoverRafRef.current = 0;
+      if (!nodeDragRef.current && !panRef.current) {
+        setHoverId(null);
+      }
+    });
   }, []);
+
   const onNodeFocus = useCallback(
     (id: string) => onFocusSymbol(id),
     [onFocusSymbol],
@@ -877,7 +1122,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
 
   /* ----- highlighting ---------------------------------------------------- */
 
-  const activeId = hoverId ?? dragNodeId ?? mapSelectedId;
+  const activeId = dragNodeId ?? hoverId ?? mapSelectedId;
   const activeNeighbors = activeId
     ? (layout.adjacency.get(activeId) ?? new Set<string>())
     : null;
@@ -898,9 +1143,21 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [analysis.symbols]);
 
-  /** Kinds actually present in the project (drives pills + legend). Any
-   *  SymbolKind — including ones this component doesn't know about, like
-   *  "method" — automatically gets a filter pill and a legend entry. */
+  const folderOptions = useMemo<ThemedDropdownOption<string>[]>(
+    () => [
+      {
+        value: "all",
+        label: "All folders",
+        badge: String(analysis.symbols.length),
+      },
+      ...availableFolders.map((f) => ({
+        value: f,
+        label: f,
+      })),
+    ],
+    [availableFolders, analysis.symbols.length],
+  );
+
   const availableKinds = useMemo(() => {
     const set = new Set<SymbolKind>();
     for (const s of analysis.symbols) set.add(s.kind);
@@ -913,11 +1170,14 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
       label: k.charAt(0).toUpperCase() + k.slice(1),
     })),
     ...(includePackages
-      ? [{ cls: "dlc-node-package", label: "npm package" }]
+      ? [{ cls: "dlc-node-package", label: "External dep" }]
       : []),
   ];
 
   const manualCount = Object.keys(positions).length;
+  const isInteracting = panning || dragNodeId !== null;
+  // Auto-pause background flow dots when graph has many edges to keep 60fps
+  const autoFlowPaused = flowPaused || layout.edges.length > 90;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -927,44 +1187,52 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
           <MapIcon className="w-4 h-4 text-slate-400" />
           <span>Codebase Map</span>
           <span className="text-[10px] font-mono text-slate-500">
-            {layout.nodes.length} nodes • {layout.edges.length} edges
+            {layout.nodes.length} nodes · {layout.edges.length} edges
+            {clusterBoxes.length > 0 ? ` · ${clusterBoxes.length} modules` : ""}
             {layout.trimmed
-              ? ` • top ${MAX_MAP_NODES} of ${layout.totalSymbols} by connectivity`
+              ? ` · top ${MAX_MAP_NODES} of ${layout.totalSymbols} by connectivity`
               : ""}
-            {manualCount > 0 ? ` • ${manualCount} moved` : ""}
+            {manualCount > 0 ? ` · ${manualCount} moved` : ""}
           </span>
         </div>
 
-        <select
+        <ThemedDropdown
           value={folder}
-          onChange={(e) => setFolder(e.target.value)}
-          aria-label="Scope map to folder"
-          className="text-xs rounded-md surface-raised border border-subtle text-slate-300 py-1 px-2 focus:outline-none focus:border-purple-500 max-w-[190px]"
-        >
-          <option value="all">All folders</option>
-          {availableFolders.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
+          options={folderOptions}
+          onChange={setFolder}
+          ariaLabel="Scope map to folder"
+          menuTitle="Filter Map by Folder"
+          triggerIcon={<Folder className="w-3.5 h-3.5" />}
+          triggerClassName="max-w-[210px]"
+          menuWidthClass="w-72"
+        />
 
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
           {(["all", ...availableKinds] as ("all" | SymbolKind)[]).map((k) => (
             <button
               key={k}
               type="button"
               onClick={() => setKind(k)}
-              className={`text-[11px] px-2.5 py-1 rounded-full capitalize font-medium transition-colors cursor-pointer shrink-0 ${
+              className={`text-[11px] px-2.5 py-1 rounded-lg capitalize font-medium transition-colors cursor-pointer shrink-0 border ${
                 kind === k
-                  ? "bg-purple-600 text-white"
-                  : "surface-raised text-slate-400 hover:text-slate-200 border border-subtle"
+                  ? "bg-purple-600 border-purple-600 text-white"
+                  : "surface-raised text-slate-400 hover:text-slate-100 border-subtle"
               }`}
             >
-              {k === "all" ? "All kinds" : `${k}s`}
+              {k === "all" ? "All kinds" : k === "class" ? "Classes" : `${k}s`}
             </button>
           ))}
         </div>
+
+        <label className="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showClusters}
+            onChange={(e) => setShowClusters(e.target.checked)}
+            className="rounded border-slate-700 bg-transparent text-purple-500 focus:ring-0 cursor-pointer"
+          />
+          <span>Clusters</span>
+        </label>
 
         <label className="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer select-none">
           <input
@@ -974,17 +1242,17 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
             className="rounded border-slate-700 bg-transparent text-purple-500 focus:ring-0 cursor-pointer"
           />
           <Boxes className="w-3.5 h-3.5 text-slate-400" />
-          <span>Packages</span>
+          <span>External</span>
         </label>
 
         <div className="flex items-center gap-1 ml-auto">
           <button
             type="button"
             onClick={() => setFlowPaused((p) => !p)}
-            className={`p-1.5 rounded-lg border transition-colors ${
+            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
               flowPaused
                 ? "chip-accent"
-                : "surface-raised border-chrome text-slate-300 hover:text-white"
+                : "surface-raised border-chrome text-slate-300 hover:text-slate-100"
             }`}
             title={
               flowPaused
@@ -1001,7 +1269,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
           <button
             type="button"
             onClick={() => zoomCenter(1.2)}
-            className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-slate-100 transition-colors cursor-pointer"
             title="Zoom in"
           >
             <ZoomIn className="w-3.5 h-3.5" />
@@ -1009,7 +1277,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
           <button
             type="button"
             onClick={() => zoomCenter(1 / 1.2)}
-            className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-slate-100 transition-colors cursor-pointer"
             title="Zoom out"
           >
             <ZoomOut className="w-3.5 h-3.5" />
@@ -1017,7 +1285,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
           <button
             type="button"
             onClick={fitView}
-            className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-slate-100 transition-colors cursor-pointer"
             title="Fit map to view"
           >
             <Maximize2 className="w-3.5 h-3.5" />
@@ -1026,7 +1294,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
             type="button"
             onClick={resetLayout}
             disabled={manualCount === 0}
-            className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-white transition-colors disabled:opacity-40"
+            className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-slate-100 transition-colors disabled:opacity-40 cursor-pointer"
             title="Re-run auto layout (clears manually moved nodes)"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -1034,7 +1302,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
           <button
             type="button"
             onClick={resetView}
-            className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-slate-100 transition-colors cursor-pointer"
             title="Reset pan & zoom"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -1057,7 +1325,9 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
             ref={svgRef}
             className={`w-full h-full touch-none select-none ${
               panning ? "cursor-grabbing" : "cursor-grab"
-            }${flowPaused ? " dlc-flow-paused" : ""}`}
+            }${autoFlowPaused ? " dlc-flow-paused" : ""}${
+              isInteracting ? " dlc-interacting" : ""
+            }`}
             onPointerDown={handleCanvasPointerDown}
             onPointerMove={handleCanvasPointerMove}
             onPointerUp={releasePointer}
@@ -1079,9 +1349,10 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
             </defs>
 
             <g
+              ref={cameraGroupRef}
               transform={`matrix(${view.k} 0 0 ${view.k} ${view.x} ${view.y})`}
             >
-              {/* Spatial grid (covers the pannable region) */}
+              {/* Spatial grid */}
               <rect
                 x={-4000}
                 y={-4000}
@@ -1091,38 +1362,53 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
                 className="dlc-grid-rect"
               />
 
+              {/* Subsystem / Module Cluster Bounding Boxes */}
+              {clusterBoxes.map((box) => (
+                <g key={`cluster:${box.id}`} pointerEvents="none">
+                  <rect
+                    x={box.x}
+                    y={box.y}
+                    width={box.w}
+                    height={box.h}
+                    rx={16}
+                    className="dlc-cluster-rect"
+                  />
+                  <text
+                    x={box.x + 12}
+                    y={box.y + 15}
+                    className="dlc-cluster-label"
+                  >
+                    {box.label} ({box.count})
+                  </text>
+                </g>
+              ))}
+
               {/* Edges */}
               {layout.edges.map((e) => {
                 const s = effNodesById.get(e.source);
                 const t = effNodesById.get(e.target);
                 if (!s || !t) return null;
-                const forward = t.x + NODE_W / 2 >= s.x + NODE_W / 2;
                 const hot =
                   !!activeId &&
                   (e.source === activeId || e.target === activeId);
                 return (
                   <GraphEdge
                     key={e.id}
-                    x1={forward ? s.x + NODE_W : s.x}
-                    y1={s.y + NODE_H / 2}
-                    x2={forward ? t.x : t.x + NODE_W}
-                    y2={t.y + NODE_H / 2}
-                    forward={forward}
+                    id={e.id}
+                    sx={s.x}
+                    sy={s.y}
+                    tx={t.x}
+                    ty={t.y}
                     hot={hot}
                     dimmed={!!activeId && !hot}
                     dotted={e.source.startsWith("pkg:")}
+                    registerEdgeEl={registerEdgeEl}
                   />
                 );
               })}
 
-              {/* Nodes — dragged node rendered last (raised to front) */}
-              {(dragNodeId
-                ? [
-                    ...effNodes.filter((n) => n.id !== dragNodeId),
-                    ...effNodes.filter((n) => n.id === dragNodeId),
-                  ]
-                : effNodes
-              ).map((n) => {
+              {/* Nodes — stable DOM order so React never detaches/duplicates a node during pointer drag */}
+              {effNodes.map((n) => {
                 const isPkg = n.kind === "package";
                 return (
                   <GraphNode
@@ -1144,9 +1430,8 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
                     active={n.id === activeId}
                     dimmed={isDimmedNode(n.id)}
                     dragging={n.id === dragNodeId}
+                    registerNodeEl={registerNodeEl}
                     onDown={onNodeDown}
-                    onMove={onNodeMove}
-                    onUp={onNodeUp}
                     onEnter={onNodeEnter}
                     onLeave={onNodeLeave}
                     onFocus={onNodeFocus}
@@ -1173,8 +1458,8 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
             </span>
             <span className="text-slate-600 hidden md:inline">|</span>
             <span className="hidden md:inline">
-              drag nodes to rearrange • pinch / scroll to zoom • click to trace
-              • double-click to focus
+              drag nodes to rearrange · pinch / scroll to zoom · click to trace
+              · double-click to focus
             </span>
           </div>
         )}

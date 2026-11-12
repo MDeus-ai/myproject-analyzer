@@ -15,6 +15,8 @@ import {
   ChevronDown,
   Network,
   MoreVertical,
+  Check,
+  Layers,
 } from "lucide-react";
 import {
   FolderAnalysisStats,
@@ -55,8 +57,15 @@ function useClickOutside(
         close();
       }
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isOpen, ref, close]);
 }
 
@@ -96,18 +105,22 @@ const ExportMenu: React.FC<ExportMenuProps> = ({
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
         aria-label="Export options"
-        className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        className={`flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
+          isOpen ? "border-accent text-accent" : ""
+        }`}
         title={disabled ? "Open a project to enable exports" : "Export options"}
       >
-        <Download className="w-3.5 h-3.5 text-slate-400" />
+        <Download className="w-3.5 h-3.5 text-accent" />
         <span className="hidden sm:inline">Export</span>
         <ChevronDown
-          className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className={`w-3 h-3 text-slate-400 transition-transform ${
+            isOpen ? "rotate-180 text-accent" : ""
+          }`}
         />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl surface-card border border-chrome shadow-2xl shadow-black/50 z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl surface-card border border-chrome shadow-2xl shadow-black/40 z-50 overflow-hidden">
           <div className="px-4 py-2.5 border-b border-subtle text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             Export Project
           </div>
@@ -115,9 +128,9 @@ const ExportMenu: React.FC<ExportMenuProps> = ({
             <button
               type="button"
               onClick={() => run(onZip)}
-              className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors"
+              className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors cursor-pointer"
             >
-              <FileArchive className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+              <FileArchive className="w-4 h-4 text-accent shrink-0 mt-0.5" />
               <span>
                 <span className="block text-xs font-semibold text-slate-200">
                   {isZipping ? "Archiving…" : "Flat ZIP Archive"}
@@ -131,9 +144,9 @@ const ExportMenu: React.FC<ExportMenuProps> = ({
             <button
               type="button"
               onClick={() => run(onPdf)}
-              className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors"
+              className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors cursor-pointer"
             >
-              <FileText className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+              <FileText className="w-4 h-4 text-accent shrink-0 mt-0.5" />
               <span>
                 <span className="block text-xs font-semibold text-slate-200">
                   Structure PDF
@@ -148,9 +161,9 @@ const ExportMenu: React.FC<ExportMenuProps> = ({
               <button
                 type="button"
                 onClick={() => run(onImage)}
-                className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors"
+                className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors cursor-pointer"
               >
-                <ImageIcon className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                <ImageIcon className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <span>
                   <span className="block text-xs font-semibold text-slate-200">
                     Image (PNG / JPEG)
@@ -169,9 +182,192 @@ const ExportMenu: React.FC<ExportMenuProps> = ({
 };
 
 /* ------------------------------------------------------------------ */
-/* Overflow "More" menu — secondary actions on small screens.          */
-/* Below lg, Sample / Help / Review Exclusions / the active-project    */
-/* readout live here instead of crowding the header row.               */
+/* Workspace Views Definitions                                         */
+/* ------------------------------------------------------------------ */
+
+const TABS = [
+  {
+    id: "files",
+    label: "Files",
+    description: "Flattened file list & collision resolver",
+    icon: ListFilter,
+  },
+  {
+    id: "tree",
+    label: "Tree",
+    description: "Interactive folder hierarchy explorer",
+    icon: FolderTree,
+  },
+  {
+    id: "pdf",
+    label: "PDF & Image",
+    description: "Vector blueprint & high-res sheet exporter",
+    icon: FileText,
+  },
+  {
+    id: "analytics",
+    label: "Stats",
+    description: "Language distribution & size telemetry",
+    icon: BarChart3,
+  },
+  {
+    id: "analyzer",
+    label: "Analyzer",
+    description: "Multi-file code bundle & token estimator",
+    icon: Code2,
+  },
+  {
+    id: "deplenz",
+    label: "DepLenz",
+    description: "Dependency graph, surgical prompt & evolution log",
+    icon: Network,
+  },
+] as const;
+
+type TabItem = (typeof TABS)[number];
+
+/* ------------------------------------------------------------------ */
+/* Theme-styled View Overflow Dropdown ("More Views" / View Switcher)  */
+/* Ensures the toolbar NEVER wraps to a second row at any width.       */
+/* ------------------------------------------------------------------ */
+
+interface ViewsOverflowDropdownProps {
+  overflowTabs: readonly TabItem[];
+  activeTab: WorkspaceTab;
+  setActiveTab: (tab: WorkspaceTab) => void;
+  badgeFor: (id: WorkspaceTab) => string | null;
+  allCollapsed: boolean;
+}
+
+const ViewsOverflowDropdown: React.FC<ViewsOverflowDropdownProps> = ({
+  overflowTabs,
+  activeTab,
+  setActiveTab,
+  badgeFor,
+  allCollapsed,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useClickOutside(isOpen, ref, () => setIsOpen(false));
+
+  if (overflowTabs.length === 0) return null;
+
+  const activeInOverflow = overflowTabs.find((t) => t.id === activeTab);
+  const ActiveIcon = activeInOverflow?.icon ?? Layers;
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-label={allCollapsed ? "Switch workspace view" : "More workspace views"}
+        className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap border cursor-pointer ${
+          activeInOverflow || isOpen
+            ? "chip-accent"
+            : "surface-raised border-chrome text-slate-300 hover:text-slate-100 hover:bg-[var(--surface-raised-hover)]"
+        }`}
+      >
+        <ActiveIcon className="w-3.5 h-3.5 shrink-0" />
+        <span>
+          {activeInOverflow
+            ? activeInOverflow.label
+            : allCollapsed
+              ? "Views"
+              : `More (${overflowTabs.length})`}
+        </span>
+        {activeInOverflow && badgeFor(activeInOverflow.id) && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-mono font-medium bg-accent-soft text-accent border border-accent">
+            {badgeFor(activeInOverflow.id)}
+          </span>
+        )}
+        <ChevronDown
+          className={`w-3 h-3 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          role="listbox"
+          aria-label="Workspace views"
+          className="absolute left-0 top-full mt-2 w-68 max-w-[calc(100vw-1.5rem)] rounded-2xl surface-card border border-chrome shadow-2xl shadow-black/40 z-50 overflow-hidden"
+        >
+          <div className="px-4 py-2 border-b border-subtle text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Workspace Views
+          </div>
+          <div className="p-1.5 space-y-0.5">
+            {overflowTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isSelected = activeTab === tab.id;
+              const badge = badgeFor(tab.id);
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between gap-2.5 p-2 rounded-xl text-left transition-all cursor-pointer ${
+                    isSelected
+                      ? "chip-accent border"
+                      : "border border-transparent hover:bg-[var(--surface-hover)]"
+                  }`}
+                >
+                  <span className="flex items-start gap-2.5 min-w-0 flex-1">
+                    <Icon
+                      className={`w-4 h-4 shrink-0 mt-0.5 ${
+                        isSelected ? "text-accent" : "text-slate-400"
+                      }`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block text-xs font-semibold truncate ${
+                          isSelected ? "text-accent" : "text-slate-200"
+                        }`}
+                      >
+                        {tab.label}
+                      </span>
+                      <span className="block text-[10px] text-slate-500 truncate">
+                        {tab.description}
+                      </span>
+                    </span>
+                  </span>
+
+                  <span className="flex items-center gap-1.5 shrink-0">
+                    {badge && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
+                          isSelected
+                            ? "bg-accent-soft text-accent"
+                            : "surface-raised text-slate-400"
+                        }`}
+                      >
+                        {badge}
+                      </span>
+                    )}
+                    {isSelected && (
+                      <Check className="w-3.5 h-3.5 text-accent shrink-0" />
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/* Overflow "More" menu — secondary actions when horizontal width      */
+/* doesn't fit every auxiliary button inline.                          */
 /* ------------------------------------------------------------------ */
 
 interface OverflowMenuProps {
@@ -201,42 +397,40 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({
   };
 
   return (
-    <div ref={ref} className="relative lg:hidden">
+    <div ref={ref} className="relative xl:hidden">
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
         aria-label="More actions"
         title="More actions"
-        className={`relative p-1.5 rounded-lg border transition-colors ${
+        className={`relative p-1.5 rounded-lg border transition-colors cursor-pointer ${
           isOpen
-            ? "bg-purple-600/15 border-purple-500/40 text-purple-300"
-            : "surface-raised border-chrome text-slate-300 hover:text-white"
+            ? "chip-accent"
+            : "surface-raised border-chrome text-slate-300 hover:text-slate-100 hover:bg-[var(--surface-raised-hover)]"
         }`}
       >
         <MoreVertical className="w-4 h-4" />
-        {/* Dot indicator when exclusions need attention */}
         {excludedCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 border border-[var(--surface-header)]" />
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl surface-card border border-chrome shadow-2xl shadow-black/50 z-50 overflow-hidden">
-          {/* Active project readout — the header pill is hidden on small
-              screens, so mobile users see it here instead. */}
+        <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl surface-card border border-chrome shadow-2xl shadow-black/40 z-50 overflow-hidden">
           {projectName && (
             <div className="px-4 py-2.5 border-b border-subtle">
-              <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+              <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
                 Active Project
               </span>
-              <div className="flex items-center space-x-2 text-xs text-slate-300 min-w-0">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                <span className="font-mono font-medium text-purple-400 truncate">
+              <div className="flex items-center space-x-1.5 text-xs text-slate-300 min-w-0">
+                <span className="font-mono font-semibold text-accent truncate">
                   {projectName}
                 </span>
-                <span className="text-slate-500 shrink-0">•</span>
-                <span className="shrink-0">{projectFileCount} files</span>
+                <span className="text-slate-500 shrink-0">·</span>
+                <span className="shrink-0 font-mono tabular-nums">
+                  {projectFileCount} files
+                </span>
               </div>
             </div>
           )}
@@ -245,7 +439,7 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({
             <button
               type="button"
               onClick={() => run(onLoadSample)}
-              className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors"
+              className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <span>
@@ -262,9 +456,9 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({
               <button
                 type="button"
                 onClick={() => run(onReviewExclusions)}
-                className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors"
+                className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors cursor-pointer"
               >
-                <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <ShieldAlert className="w-4 h-4 text-warn shrink-0 mt-0.5" />
                 <span>
                   <span className="block text-xs font-semibold text-warn">
                     Review Exclusions ({excludedCount})
@@ -279,9 +473,9 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({
             <button
               type="button"
               onClick={() => run(onHelp)}
-              className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors"
+              className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors cursor-pointer"
             >
-              <HelpCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+              <HelpCircle className="w-4 h-4 text-accent shrink-0 mt-0.5" />
               <span>
                 <span className="block text-xs font-semibold text-slate-200">
                   Shortcuts &amp; Documentation
@@ -299,23 +493,12 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({
 };
 
 /* ------------------------------------------------------------------ */
-/* Single-row consolidated header                                      */
+/* Strictly Single-Row Consolidated Desktop Toolbar                    */
 /*                                                                     */
-/* Layout contract per breakpoint:                                     */
-/*   <md    brand(icon) · tab icons (scroll) · Open · Export · More    */
-/*   md+    brand(text) · tab labels        · +Theme                   */
-/*   lg+    + project pill · +Sample · +Help (overflow menu hidden)    */
-/*   xl+    + exclusion pill inline                                    */
+/* Dynamically measures width via ResizeObserver so tabs sit inline    */
+/* in the single header row and overflow gracefully into a theme-      */
+/* styled dropdown when the window narrows — NEVER creating a 2nd row. */
 /* ------------------------------------------------------------------ */
-
-const TABS = [
-  { id: "files", label: "Files", icon: ListFilter },
-  { id: "tree", label: "Tree", icon: FolderTree },
-  { id: "pdf", label: "PDF & Image", icon: FileText },
-  { id: "analytics", label: "Stats", icon: BarChart3 },
-  { id: "analyzer", label: "Analyzer", icon: Code2 },
-  { id: "deplenz", label: "DepLenz", icon: Network },
-] as const;
 
 export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
   activeTab,
@@ -332,7 +515,41 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
   excludedFolders,
   onReviewExclusionsClick,
 }) => {
-  const badgeFor = (id: (typeof TABS)[number]["id"]): string | null => {
+  const headerRef = useRef<HTMLElement>(null);
+  const [visibleTabCount, setVisibleTabCount] = useState<number>(TABS.length);
+
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+
+    const updateVisibleCount = (width: number) => {
+      if (width >= 1060) {
+        setVisibleTabCount(TABS.length); // All 6 inline
+      } else if (width >= 880) {
+        setVisibleTabCount(4); // 4 inline + More (2)
+      } else if (width >= 720) {
+        setVisibleTabCount(3); // 3 inline + More (3)
+      } else if (width >= 560) {
+        setVisibleTabCount(2); // 2 inline + More (4)
+      } else {
+        setVisibleTabCount(0); // Single compact "Views" dropdown
+      }
+    };
+
+    updateVisibleCount(el.clientWidth || window.innerWidth);
+
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          updateVisibleCount(entry.contentRect.width);
+        }
+      });
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+  }, []);
+
+  const badgeFor = (id: WorkspaceTab): string | null => {
     if (!stats) return null;
     if (id === "files") return String(stats.totalFiles);
     if (id === "tree") return `${stats.totalFolders} dirs`;
@@ -340,63 +557,118 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
   };
 
   const excludedCount = excludedFolders?.length ?? 0;
+  const inlineTabs = TABS.slice(0, visibleTabCount);
+  const overflowTabs = TABS.slice(visibleTabCount);
 
   return (
-    <header className="surface-header border-b border-chrome text-slate-200 select-none sticky top-0 z-40">
-      {/* ROW 1 — brand + primary actions (constant across all sizes) */}
-      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2">
-        {/* Brand - clicking returns to homepage */}
+    <header
+      ref={headerRef}
+      className="surface-header border-b border-chrome text-slate-200 select-none sticky top-0 z-40"
+    >
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-12">
+        {/* Brand - clicking returns to homepage / lobby */}
         <button
           type="button"
           onClick={onGoHomeClick}
-          className="flex items-center space-x-2.5 text-left group hover:opacity-90 transition-opacity cursor-pointer shrink-0"
-          title="Go to Homepage"
+          className="flex items-center space-x-2 text-left group hover:opacity-90 transition-opacity cursor-pointer shrink-0"
+          title="Return to Home / Lobby"
         >
-          <div className="w-8 h-8 rounded-lg bg-purple-600 group-hover:bg-purple-500 flex items-center justify-center text-white shadow-sm transition-colors">
+          <div className="w-7 h-7 rounded-lg bg-purple-600 group-hover:bg-purple-500 flex items-center justify-center text-white shadow-sm transition-colors">
             <FolderTree className="w-4 h-4" />
           </div>
-          <span className="hidden sm:block font-semibold text-sm tracking-tight text-slate-100 group-hover:text-purple-300 transition-colors">
+          <span className="hidden sm:block font-semibold text-sm tracking-tight text-slate-100 group-hover:text-accent transition-colors whitespace-nowrap">
             MyProject Analyzer
           </span>
         </button>
 
-        {/* On wide screens the tabs live inline in this row (below). On
-            narrow screens this spacer pushes the action cluster right. */}
-        <div className="flex-1 min-w-0" />
+        {/* Subtle divider separating brand from inline view tabs */}
+        <div
+          className="h-5 w-px bg-[var(--border-chrome)] shrink-0"
+          aria-hidden="true"
+        />
 
-        {/* Right cluster */}
+        {/* Inline View Tabs + Overflow Dropdown (Strictly Single Row) */}
+        <nav
+          className="flex items-center gap-1 min-w-0 flex-1"
+          aria-label="Views"
+        >
+          {inlineTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            const badge = badgeFor(tab.id);
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                aria-current={isActive ? "page" : undefined}
+                title={tab.label}
+                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap border shrink-0 cursor-pointer ${
+                  isActive
+                    ? "chip-accent"
+                    : "text-slate-400 border-transparent hover:text-slate-100 hover:bg-[var(--surface-hover)]"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                <span>{tab.label}</span>
+                {badge && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono font-medium tabular-nums border ${
+                      isActive
+                        ? "bg-accent-soft text-accent border-accent"
+                        : "surface-raised text-slate-400 border-subtle"
+                    }`}
+                  >
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          <ViewsOverflowDropdown
+            overflowTabs={overflowTabs}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            badgeFor={badgeFor}
+            allCollapsed={visibleTabCount === 0}
+          />
+        </nav>
+
+        {/* Right Action Cluster */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Target folder pill (wide screens; mirrored in overflow menu) */}
+          {/* Active folder readout (wide screens; mirrored in overflow menu) */}
           {stats && (
-            <div className="hidden lg:flex items-center space-x-2 px-3 py-1 surface-raised rounded-full border border-chrome text-xs text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-mono font-medium text-accent max-w-[140px] truncate">
+            <div className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1 surface-raised rounded-lg border border-chrome text-xs text-slate-300">
+              <span className="font-mono font-semibold text-accent max-w-[130px] truncate">
                 {stats.rootName}
               </span>
-              <span className="text-slate-500">•</span>
-              <span>{stats.totalFiles} files</span>
+              <span className="text-slate-400">·</span>
+              <span className="font-mono tabular-nums text-slate-300">
+                {stats.totalFiles} files
+              </span>
             </div>
           )}
 
-          {/* Exclusion pill (extra-wide; mirrored in overflow menu) */}
+          {/* Exclusion warning button (extra-wide; mirrored in overflow menu) */}
           {excludedCount > 0 && (
             <button
               type="button"
               onClick={onReviewExclusionsClick}
-              className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1 bg-warn-soft hover:opacity-90 rounded-full border border-warn text-warn text-xs transition-colors cursor-pointer"
+              className="hidden 2xl:flex items-center space-x-1.5 px-2.5 py-1 bg-warn-soft hover:opacity-90 rounded-lg border border-warn text-warn text-xs transition-colors cursor-pointer"
               title="Review automatically excluded folders"
             >
-              <Sparkles className="w-3.5 h-3.5 text-slate-400" />
+              <ShieldAlert className="w-3.5 h-3.5 text-warn" />
               <span className="font-mono">Excluded ({excludedCount})</span>
             </button>
           )}
 
-          {/* Sample + Help: inline on lg+, in the overflow menu below */}
+          {/* Sample + Help: inline on xl+, in the overflow menu below xl */}
           <button
             type="button"
             onClick={onLoadSampleClick}
             aria-label="Load demo folder"
-            className="hidden lg:flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-300 transition-colors border border-chrome"
+            className="hidden xl:flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 transition-colors border border-chrome cursor-pointer"
             title="Load sample folder structure"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -407,7 +679,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             type="button"
             onClick={onHelpClick}
             aria-label="Help and shortcuts"
-            className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[var(--surface-hover)] transition-colors"
+            className="hidden xl:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
             title="Shortcuts & Documentation"
           >
             <HelpCircle className="w-4 h-4" />
@@ -418,7 +690,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             type="button"
             onClick={onOpenFolderClick}
             aria-label="Open folder"
-            className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-all shadow-sm active:scale-95 cursor-pointer"
+            className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-all shadow-sm active:scale-95 cursor-pointer whitespace-nowrap"
           >
             <FolderOpen className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Open Folder</span>
@@ -434,7 +706,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
 
           <ThemeSwitcher />
 
-          {/* Overflow menu — small screens only */}
+          {/* Overflow menu — below xl */}
           <OverflowMenu
             projectName={stats?.rootName ?? null}
             projectFileCount={stats?.totalFiles ?? null}
@@ -445,51 +717,6 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
           />
         </div>
       </div>
-
-      {/* ROW 2 — full tab bar with labels, own dedicated strip.
-          Shown on narrow/medium screens; on wide screens the tabs are
-          inline in row 1 instead (see below). */}
-      {/* Inline tabs — wide screens only (xl+), where they genuinely fit.
-            On narrower screens the dedicated second row above is used. */}
-      {/* Tab bar — always rendered: row 2 on narrow screens, inline on xl+ */}
-      <nav
-        className="flex items-center gap-1 overflow-x-auto scrollbar-none scroll-fade-x px-3 sm:px-5 py-1.5"
-        aria-label="Views"
-      >
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          const badge = badgeFor(tab.id);
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              aria-current={isActive ? "page" : undefined}
-              title={tab.label}
-              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap border shrink-0 ${
-                isActive
-                  ? "chip-accent"
-                  : "text-slate-400 border-transparent hover:text-slate-200 hover:bg-[var(--surface-hover)]"
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">{tab.label}</span>
-              {badge && (
-                <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-medium border ${
-                    isActive
-                      ? "bg-accent-soft text-accent border-accent"
-                      : "bg-[var(--surface-raised)] text-slate-500 border-subtle"
-                  }`}
-                >
-                  {badge}
-                </span>
-              )}{" "}
-            </button>
-          );
-        })}
-      </nav>
     </header>
   );
 };

@@ -37,48 +37,128 @@
        Pure neutrals — zero hue, so the single accent color carries
        all the identity. */
     --app-bg: #000000;
-    --surface-section: #050505;
-    --surface-header: #0a0a0a;
-    --surface-inset: #0a0a0a;
-    --surface-card: #101010;
-    --surface-raised: #161616;
-    --surface-raised-hover: #1e1e1e;
-    --surface-hover: #1a1a1a;
-    --border-chrome: #222222;
-    --border-subtle: #181818;
+    --surface-deep: #050505;
+    --surface-section: #070708;
+    --surface-header: #0b0b0d;
+    --surface-inset: #0a0a0c;
+    --surface-card: #111114;
+    --surface-elevated: #16161a;
+    --surface-raised: #18181c;
+    --surface-raised-hover: #222228;
+    --surface-hover: #1d1d22;
+    --border-chrome: #26262c;
+    --border-subtle: #1c1c21;
   }
 
   /* ------------------------------------------------------------------ */
-  /* LIGHT MODE                                                          */
-  /* Activated via <html data-appearance="light">. Inverting the slate  */
-  /* scale flips every bg-slate-*, text-slate-* and border-slate-*      */
-  /* utility in the app automatically. Neutral grays — no blue cast.    */
+  /* MODERN STANDARD LIGHT MODE                                          */
+  /* Activated via <html data-appearance="light">.                       */
+  /* Crisp alabaster/white surfaces with high-contrast slate typography  */
+  /* and automatic dark-to-light semantic hue adaptation so badges,      */
+  /* code tokens, and palette accents remain sharp and legible.          */
   /* ------------------------------------------------------------------ */
   :root[data-appearance="light"] {
     color-scheme: light;
 
-    --app-bg: #f4f4f5;
+    --app-bg: #f8fafc;
+    --surface-deep: #f1f5f9;
+    --surface-section: #f1f5f9;
     --surface-header: #ffffff;
     --surface-card: #ffffff;
-    --surface-raised: #f4f4f5;
-    --surface-raised-hover: #e9e9ec;
-    --surface-inset: #f4f4f5;
-    --surface-hover: #ececef;
-    --surface-section: #ebebef;
-    --border-chrome: #dcdce0;
-    --border-subtle: #e4e4e8;
+    --surface-elevated: #f8fafc;
+    --surface-raised: #f1f5f9;
+    --surface-raised-hover: #e2e8f0;
+    --surface-inset: #f1f5f9;
+    --surface-hover: #f1f5f9;
+    --border-chrome: #cbd5e1;
+    --border-subtle: #e2e8f0;
 
+    /* High-contrast slate text & surface scale (WCAG AA+ compliant) */
     --color-slate-50: #020617;
     --color-slate-100: #0f172a;
     --color-slate-200: #1e293b;
     --color-slate-300: #334155;
     --color-slate-400: #475569;
-    --color-slate-500: #64748b;
-    --color-slate-600: #94a3b8;
+    --color-slate-500: #475569;
+    --color-slate-600: #64748b;
     --color-slate-700: #cbd5e1;
     --color-slate-800: #e2e8f0;
     --color-slate-900: #ffffff;
     --color-slate-950: #f1f5f9;
+
+    /* Semantic accent scales remapped for light backgrounds so
+       text-*-300/400 and bg-*-950/900 render as deep ink on soft pastel */
+    --color-sky-200: #075985;
+    --color-sky-300: #0369a1;
+    --color-sky-400: #0284c7;
+    --color-sky-900: #e0f2fe;
+    --color-sky-950: #f0f9ff;
+
+    --color-blue-200: #1e40af;
+    --color-blue-300: #1d4ed8;
+    --color-blue-400: #2563eb;
+    --color-blue-900: #dbeafe;
+    --color-blue-950: #eff6ff;
+
+    --color-indigo-200: #3730a3;
+    --color-indigo-300: #4338ca;
+    --color-indigo-400: #4f46e5;
+    --color-indigo-900: #e0e7ff;
+    --color-indigo-950: #eef2ff;
+
+    --color-emerald-200: #065f46;
+    --color-emerald-300: #047857;
+    --color-emerald-400: #059669;
+    --color-emerald-900: #d1fae5;
+    --color-emerald-950: #ecfdf5;
+
+    --color-green-200: #166534;
+    --color-green-300: #15803d;
+    --color-green-400: #16a34a;
+    --color-green-900: #dcfce7;
+    --color-green-950: #f0fdf4;
+
+    --color-teal-200: #115e59;
+    --color-teal-300: #0f766e;
+    --color-teal-400: #0d9488;
+    --color-teal-900: #ccfbf1;
+    --color-teal-950: #f0fdfa;
+
+    --color-cyan-200: #155e75;
+    --color-cyan-300: #0e7490;
+    --color-cyan-400: #0891b2;
+    --color-cyan-900: #cffafe;
+    --color-cyan-950: #ecfeff;
+
+    --color-amber-200: #92400e;
+    --color-amber-300: #b45309;
+    --color-amber-400: #d97706;
+    --color-amber-900: #fef3c7;
+    --color-amber-950: #fffbeb;
+
+    --color-orange-200: #9a3412;
+    --color-orange-300: #c2410c;
+    --color-orange-400: #ea580c;
+    --color-orange-900: #ffedd5;
+    --color-orange-950: #fff7ed;
+
+    --color-rose-200: #9f1239;
+    --color-rose-300: #be123c;
+    --color-rose-400: #e11d48;
+    --color-rose-900: #ffe4e6;
+    --color-rose-950: #fff1f2;
+
+    --color-pink-200: #9d174d;
+    --color-pink-300: #be185d;
+    --color-pink-400: #db2777;
+    --color-pink-900: #fce7f3;
+    --color-pink-950: #fdf2f8;
+
+    --color-red-200: #991b1b;
+    --color-red-300: #b91c1c;
+    --color-red-400: #dc2626;
+    --color-red-900: #fee2e2;
+    --color-red-950: #fef2f2;
   }
 
   /* The PDF document sheet must always remain a white document. Reset the
@@ -106,7 +186,7 @@
     background-color: var(--app-bg);
     color: var(--color-slate-100);
     overflow-x: hidden;
-    transition: background-color 300ms ease;
+    transition: background-color 200ms ease;
   }
 
   /* Display face: every heading uses IBM Plex Sans Condensed.
@@ -128,18 +208,24 @@
   background-color: var(--surface-header);
 }
 .glass-header {
-  background-color: color-mix(in srgb, var(--surface-header) 88%, transparent);
+  background-color: color-mix(in srgb, var(--surface-header) 92%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 .surface-card {
   background-color: var(--surface-card);
 }
+.surface-elevated {
+  background-color: var(--surface-elevated);
+}
 .surface-raised {
   background-color: var(--surface-raised);
 }
 .surface-inset {
   background-color: var(--surface-inset);
+}
+.surface-deep {
+  background-color: var(--surface-deep);
 }
 .surface-section {
   background-color: var(--surface-section);
@@ -158,12 +244,12 @@
 /* as unreadable gray sludge in light mode.                            */
 /* ------------------------------------------------------------------ */
 .code-well {
-  background-color: #050505;
+  background-color: #070709;
   border-color: var(--border-subtle);
 }
 :root[data-appearance="light"] .code-well {
-  background-color: #f6f8fa;
-  border-color: #d0d7de;
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
 }
 
 /* Hide scrollbars on horizontally scrollable nav strips (links remain
@@ -309,8 +395,8 @@
   color: var(--color-purple-300);
 }
 :root[data-appearance="light"] .chip-accent {
-  background-color: color-mix(in srgb, var(--color-purple-600) 9%, #ffffff);
-  border-color: color-mix(in srgb, var(--color-purple-600) 45%, transparent);
+  background-color: color-mix(in srgb, var(--color-purple-600) 11%, #ffffff);
+  border-color: color-mix(in srgb, var(--color-purple-600) 42%, transparent);
   color: var(--color-purple-700);
 }
 
@@ -362,7 +448,7 @@ input[type="range"].slider-accent {
   fill: rgba(148, 163, 184, 0.22);
 }
 :root[data-appearance="light"] .dlc-grid-dot {
-  fill: rgba(100, 116, 139, 0.25);
+  fill: rgba(100, 116, 139, 0.28);
 }
 .dlc-grid-rect {
   pointer-events: none;
@@ -371,7 +457,6 @@ input[type="range"].slider-accent {
 /* --- nodes ------------------------------------------------------------ */
 .dlc-node {
   cursor: grab;
-  transition: opacity 120ms ease;
 }
 
 .dlc-node-method {
@@ -387,13 +472,12 @@ input[type="range"].slider-accent {
   fill: rgba(0, 0, 0, 0.65);
 }
 :root[data-appearance="light"] .dlc-node-shadow {
-  fill: rgba(15, 23, 42, 0.12);
+  fill: rgba(15, 23, 42, 0.09);
 }
 .dlc-node-rect {
   fill: var(--surface-card);
   stroke: var(--border-chrome);
   stroke-width: 1.2;
-  transition: stroke 120ms ease;
 }
 .dlc-node:hover .dlc-node-rect,
 .dlc-node-active .dlc-node-rect {
@@ -420,21 +504,21 @@ input[type="range"].slider-accent {
 .dlc-node-path {
   font-family: var(--font-mono);
   font-size: 9px;
-  fill: #64748b;
+  fill: #94a3b8;
   pointer-events: none;
 }
 .dlc-node-links {
   font-family: var(--font-mono);
   font-size: 8.5px;
   fill: var(--dlc-accent, #94a3b8);
-  opacity: 0.85;
+  opacity: 0.9;
   pointer-events: none;
 }
 :root[data-appearance="light"] .dlc-node-name {
-  fill: #1e293b;
+  fill: #0f172a;
 }
 :root[data-appearance="light"] .dlc-node-path {
-  fill: #64748b;
+  fill: #475569;
 }
 
 /* --- kind glyph chips -------------------------------------------------- */
@@ -488,9 +572,6 @@ input[type="range"].slider-accent {
   stroke: #475569;
   stroke-width: 1.2;
   opacity: 0.65;
-  transition:
-    opacity 120ms ease,
-    stroke 120ms ease;
 }
 .dlc-edge-pkg {
   stroke-dasharray: 2 5;
@@ -503,7 +584,7 @@ input[type="range"].slider-accent {
   stroke-dasharray: none;
 }
 :root[data-appearance="light"] .dlc-edge {
-  stroke: #94a3b8;
+  stroke: #64748b;
 }
 :root[data-appearance="light"] .dlc-edge-hot {
   stroke: var(--color-purple-600);
@@ -521,8 +602,8 @@ input[type="range"].slider-accent {
   pointer-events: none;
 }
 :root[data-appearance="light"] .dlc-edge-flow-soft {
-  stroke: #94a3b8;
-  opacity: 0.55;
+  stroke: #64748b;
+  opacity: 0.6;
 }
 @keyframes dlc-flow-soft {
   to {
@@ -549,9 +630,11 @@ input[type="range"].slider-accent {
   }
 }
 
-/* Global pause toggle (toolbar button adds .dlc-flow-paused to the svg). */
+/* Global pause toggle OR active drag/pan pauses continuous dash animations */
 .dlc-flow-paused .dlc-edge-flow,
-.dlc-flow-paused .dlc-edge-flow-soft {
+.dlc-flow-paused .dlc-edge-flow-soft,
+.dlc-interacting .dlc-edge-flow,
+.dlc-interacting .dlc-edge-flow-soft {
   animation-play-state: paused;
 }
 
@@ -559,10 +642,9 @@ input[type="range"].slider-accent {
 .dlc-edge-port {
   fill: #475569;
   opacity: 0.85;
-  transition: opacity 120ms ease;
 }
 :root[data-appearance="light"] .dlc-edge-port {
-  fill: #94a3b8;
+  fill: #64748b;
 }
 .dlc-edge-port-hot {
   fill: var(--color-purple-400);
@@ -735,6 +817,18 @@ label {
 .kind-method {
   --dlc-accent: #f472b6;
 }
+.kind-struct {
+  --dlc-accent: #fb923c;
+}
+.kind-trait {
+  --dlc-accent: #2dd4bf;
+}
+.dlc-node-struct {
+  --dlc-accent: #fb923c;
+}
+.dlc-node-trait {
+  --dlc-accent: #2dd4bf;
+}
 :root[data-appearance="light"] .kind-component {
   --dlc-accent: #7c3aed;
 }
@@ -750,6 +844,105 @@ label {
 :root[data-appearance="light"] .kind-method {
   --dlc-accent: #be185d;
 }
+:root[data-appearance="light"] .kind-struct,
+:root[data-appearance="light"] .dlc-node-struct {
+  --dlc-accent: #c2410c;
+}
+:root[data-appearance="light"] .kind-trait,
+:root[data-appearance="light"] .dlc-node-trait {
+  --dlc-accent: #0f766e;
+}
+
+/* --- Module cluster bounding boxes on the DepLenz canvas ------------ */
+.dlc-cluster-rect {
+  fill: color-mix(in srgb, var(--color-purple-500) 4.5%, transparent);
+  stroke: color-mix(in srgb, var(--color-purple-400) 28%, transparent);
+  stroke-width: 1.2;
+  stroke-dasharray: 5 4;
+}
+:root[data-appearance="light"] .dlc-cluster-rect {
+  fill: color-mix(in srgb, var(--color-purple-600) 4%, transparent);
+  stroke: color-mix(in srgb, var(--color-purple-600) 32%, transparent);
+}
+.dlc-cluster-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  fill: var(--color-purple-300);
+  opacity: 0.85;
+  pointer-events: none;
+}
+:root[data-appearance="light"] .dlc-cluster-label {
+  fill: var(--color-purple-700);
+}
+
+/* --- Syntax highlighting token colors (dark + light adaptive) ------- */
+:root {
+  --code-font-size: 12px;
+  --ui-font-scale: 1;
+  --syn-keyword: #c084fc;
+  --syn-type: #38bdf8;
+  --syn-fn: #60a5fa;
+  --syn-string: #34d399;
+  --syn-number: #fbbf24;
+  --syn-comment: #64748b;
+  --syn-macro: #fb923c;
+  --syn-lifetime: #f472b6;
+  --syn-operator: #94a3b8;
+  --syn-punct: #94a3b8;
+  --syn-attr: #2dd4bf;
+}
+:root[data-appearance="light"] {
+  --syn-keyword: #7c3aed;
+  --syn-type: #0369a1;
+  --syn-fn: #1d4ed8;
+  --syn-string: #047857;
+  --syn-number: #b45309;
+  --syn-comment: #64748b;
+  --syn-macro: #c2410c;
+  --syn-lifetime: #be185d;
+  --syn-operator: #475569;
+  --syn-punct: #64748b;
+  --syn-attr: #0f766e;
+}
+.syn-keyword {
+  color: var(--syn-keyword);
+  font-weight: 600;
+}
+.syn-type {
+  color: var(--syn-type);
+}
+.syn-fn {
+  color: var(--syn-fn);
+}
+.syn-string {
+  color: var(--syn-string);
+}
+.syn-number {
+  color: var(--syn-number);
+}
+.syn-comment {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+.syn-macro {
+  color: var(--syn-macro);
+  font-weight: 600;
+}
+.syn-lifetime {
+  color: var(--syn-lifetime);
+}
+.syn-operator {
+  color: var(--syn-operator);
+}
+.syn-attr {
+  color: var(--syn-attr);
+}
+.code-scaled {
+  font-size: var(--code-font-size, 12px);
+}
 
 /* --- Homepage graph mock: kind-colored SVG (adapts via kind class) -- */
 .mock-accent {
@@ -759,3 +952,4 @@ label {
   fill: color-mix(in srgb, var(--dlc-accent) 16%, transparent);
   stroke: color-mix(in srgb, var(--dlc-accent) 45%, transparent);
 }
+

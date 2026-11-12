@@ -38,11 +38,24 @@ import { getFileExtension } from "@myproject/core/fileHelpers";
 import {
   isTextReadableFile,
   MAX_TEXT_READ_SIZE,
+  type AnalyzerStyle,
 } from "@myproject/core/codeAnalyzer";
 import {
   DEFAULT_EXCLUSION_RULES,
   matchExcludedSegment,
 } from "@myproject/core/folderExclusions";
+import {
+  deserializeDepLenzResult,
+  toRustFileInputs,
+  type DepLenzEngine,
+  type SerializedDepLenzAnalysisResult,
+} from "@myproject/core/engineBridge";
+import type {
+  CodebaseSearchMatch,
+  CodebaseSearchOptions,
+  DepLenzAnalysisResult,
+  DepLenzSymbol,
+} from "@myproject/core/depLenz";
 
 const HEAVY_EXCLUSIONS = new Set(
   DEFAULT_EXCLUSION_RULES.filter((r) => r.isDefault).map((r) =>
@@ -177,6 +190,27 @@ export class ElectronPlatformBridge implements PlatformBridge {
     await this.host.saveFile(suggestedName, data);
   }
 
+  /**
+   * Resolves a preview URL for an image file on desktop:
+   * - Existing previewUrl (scenario/web import) is returned directly.
+   * - Path-backed desktop files use the gated `myproject-asset://` custom protocol.
+   * - Blob-backed files fall back to an object URL.
+   */
+  createPreviewUrl(file: ProcessedFile): string | undefined {
+    if (file.previewUrl) return file.previewUrl;
+    if (file.source?.kind === "path" && file.source.absolutePath) {
+      return `myproject-asset://local?path=${encodeURIComponent(file.source.absolutePath)}`;
+    }
+    const blob = file.source?.blob ?? file.blob;
+    return blob ? URL.createObjectURL(blob) : undefined;
+  }
+
+  revokePreviewUrl(url: string): void {
+    if (url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+    }
+  }
+
   /* ---- Live watch (Phase 2) ---- */
 
   async startWatch(rootPath: string, opts: WatchOptions): Promise<string> {
@@ -230,4 +264,60 @@ export class ElectronPlatformBridge implements PlatformBridge {
       errors: res.errors,
     };
   }
+}
+
+/**
+ * Creates a `DepLenzEngine` backed by the Electron main process / native Rust
+ * N-API addon (`window.myprojectDesktop.engineBuildGraph` / `engineSearch`).
+ */
+export function createDesktopDepLenzEngine(
+  host: DesktopHostBridge,
+): DepLenzEngine {
+  return {
+    backend: "desktop-ipc",
+
+    async buildGraph(
+      files: ProcessedFile[],
+    ): Promise<DepLenzAnalysisResult | null> {
+      if (typeof host.engineBuildGraph !== "function") return null;
+      const res = await host.engineBuildGraph(toRustFileInputs(files));
+      if (!res.ok || !res.graphJson) return null;
+      const parsed = JSON.parse(
+        res.graphJson,
+      ) as SerializedDepLenzAnalysisResult;
+      return deserializeDepLenzResult(parsed);
+    },
+
+    async search(
+      files: ProcessedFile[],
+      opts: CodebaseSearchOptions,
+      symbolsMap?: Map<string, DepLenzSymbol[]>,
+    ): Promise<CodebaseSearchMatch[] | null> {
+      if (typeof host.engineSearch !== "function") return null;
+      const symbolsMapJson = symbolsMap
+        ? JSON.stringify(Object.fromEntries(symbolsMap.entries()))
+        : null;
+      const res = await host.engineSearch(
+        toRustFileInputs(files),
+        opts,
+        symbolsMapJson,
+      );
+      if (!res.ok || !res.matchesJson) return null;
+      return JSON.parse(res.matchesJson) as CodebaseSearchMatch[];
+    },
+
+    async estimateTokens(
+      files: ProcessedFile[],
+      opts: { includeToc: boolean; includeLineNumbers: boolean },
+    ): Promise<Record<AnalyzerStyle, number> | null> {
+      if (typeof host.engineEstimateTokens !== "function") return null;
+      const res = await host.engineEstimateTokens(
+        toRustFileInputs(files),
+        opts.includeToc,
+        opts.includeLineNumbers,
+      );
+      if (!res.ok || !res.tokensJson) return null;
+      return JSON.parse(res.tokensJson) as Record<AnalyzerStyle, number>;
+    },
+  };
 }

@@ -31,6 +31,9 @@ interface SampleTemplateFile {
 
 export type SampleScenarioId =
   | "clean"
+  | "web"
+  | "rust"
+  | "cpp"
   | "heavy"
   | "formats"
   | "gitignore"
@@ -49,13 +52,33 @@ export interface SampleScenarioMeta {
 export const SAMPLE_SCENARIOS: SampleScenarioMeta[] = [
   {
     id: "clean",
-    label: "Clean Demo",
-    verifies: "Baseline: normal project, all views work",
+    label: "Clean Demo (Web SaaS)",
+    verifies: "Baseline: TypeScript/React SaaS project, all views work",
     expected: [
       "24 files imported",
       "No exclusion modal",
       "No secrets banner",
-      "All views (Files/Tree/PDF/Stats/Analyzer) render",
+      "All views (Files/Tree/PDF/Stats/Analyzer/DepLenz) render",
+    ],
+  },
+  {
+    id: "rust",
+    label: "Rust KV Engine",
+    verifies: "Rust codebase analysis: fn, struct, trait, impl methods, crate:: imports",
+    expected: [
+      "Rust Systems Lens detected in DepLenz",
+      "Extracts structs (WalWriter, MemTable, KvServer), traits (StorageEngine), and impl methods",
+      "Resolves use crate::storage::wal and use crate::net::server call edges",
+    ],
+  },
+  {
+    id: "cpp",
+    label: "C++20 Physics Engine",
+    verifies: "C/C++ codebase analysis: #include header-to-source linking, classes, structs, methods",
+    expected: [
+      "C/C++ Native Lens detected in DepLenz",
+      "Links #include \"engine/world.hpp\" in main.cpp toPhysicsWorld::stepSimulation in world.cpp",
+      "Extracts Vec3 struct, PhysicsWorld class, RenderPipeline class, and out-of-line methods",
     ],
   },
   {
@@ -638,6 +661,307 @@ const COLLISION_FILES: SampleTemplateFile[] = [
   },
 ];
 
+const RUST_ENGINE_FILES: SampleTemplateFile[] = [
+  {
+    relativePath: "orbit-kv-engine/Cargo.toml",
+    content: [
+      '[package]',
+      'name = "orbit-kv-engine"',
+      'version = "0.4.2"',
+      'edition = "2021"',
+      '',
+      '[dependencies]',
+      'tokio = { version = "1.38", features = ["full"] }',
+      'serde = { version = "1.0", features = ["derive"] }',
+      'bytes = "1.6"',
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "orbit-kv-engine/README.md",
+    content:
+      "# Orbit KV Engine\n\nHigh-throughput log-structured merge-tree (LSM) key-value store written in Rust.\n\n## Architecture\n- `src/storage/wal.rs` — Write-Ahead Log with CRC32 frame integrity\n- `src/storage/memtable.rs` — Concurrent skip-list MemTable & StorageEngine trait\n- `src/net/server.rs` — Async TCP protocol server",
+    type: "text/markdown",
+  },
+  {
+    relativePath: "orbit-kv-engine/src/lib.rs",
+    content: [
+      "pub mod storage;",
+      "pub mod net;",
+      "",
+      "use crate::storage::memtable::{MemTable, open_memtable};",
+      "use crate::storage::wal::append_wal_record;",
+      "",
+      "pub struct EngineConfig {",
+      "    pub data_dir: String,",
+      "    pub max_memtable_bytes: usize,",
+      "    pub sync_on_write: bool,",
+      "}",
+      "",
+      "pub fn bootstrap_engine(config: EngineConfig) -> MemTable {",
+      "    append_wal_record(&config.data_dir, b\"BOOTSTRAP\");",
+      "    open_memtable(config.max_memtable_bytes)",
+      "}",
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "orbit-kv-engine/src/main.rs",
+    content: [
+      "use crate::lib::{EngineConfig, bootstrap_engine};",
+      "use crate::net::server::{KvServer, start_rpc_listener};",
+      "",
+      "pub fn main() {",
+      "    let cfg = EngineConfig {",
+      '        data_dir: String::from("/var/lib/orbit"),',
+      "        max_memtable_bytes: 64 * 1024 * 1024,",
+      "        sync_on_write: true,",
+      "    };",
+      "    let table = bootstrap_engine(cfg);",
+      "    start_rpc_listener(table, 7480);",
+      "}",
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "orbit-kv-engine/src/storage/wal.rs",
+    content: [
+      "use std::fs::OpenOptions;",
+      "use std::io::Write;",
+      "",
+      "#[derive(Debug, Clone)]",
+      "pub struct WalRecord {",
+      "    pub sequence: u64,",
+      "    pub checksum: u32,",
+      "    pub payload: Vec<u8>,",
+      "}",
+      "",
+      "pub fn compute_crc32(payload: &[u8]) -> u32 {",
+      "    let mut hash: u32 = 0x811c9dc5;",
+      "    for byte in payload {",
+      "        hash ^= *byte as u32;",
+      "        hash = hash.wrapping_mul(0x01000193);",
+      "    }",
+      "    hash",
+      "}",
+      "",
+      "pub fn append_wal_record(dir: &str, payload: &[u8]) -> WalRecord {",
+      "    let crc = compute_crc32(payload);",
+      "    WalRecord {",
+      "        sequence: 1,",
+      "        checksum: crc,",
+      "        payload: payload.to_vec(),",
+      "    }",
+      "}",
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "orbit-kv-engine/src/storage/memtable.rs",
+    content: [
+      "use std::collections::BTreeMap;",
+      "use crate::storage::wal::{WalRecord, append_wal_record, compute_crc32};",
+      "",
+      "pub trait StorageEngine {",
+      "    fn put_key(&mut self, key: String, value: Vec<u8>) -> bool;",
+      "    fn get_key(&self, key: &str) -> Option<Vec<u8>>;",
+      "}",
+      "",
+      "pub struct MemTable {",
+      "    pub entries: BTreeMap<String, Vec<u8>>,",
+      "    pub capacity_bytes: usize,",
+      "}",
+      "",
+      "impl MemTable {",
+      "    pub fn insert_entry(&mut self, key: String, value: Vec<u8>) -> WalRecord {",
+      '        let rec = append_wal_record("/var/lib/orbit", &value);',
+      "        self.entries.insert(key, value);",
+      "        rec",
+      "    }",
+      "",
+      "    pub fn verify_snapshot(&self, buf: &[u8]) -> u32 {",
+      "        compute_crc32(buf)",
+      "    }",
+      "}",
+      "",
+      "pub fn open_memtable(capacity_bytes: usize) -> MemTable {",
+      "    MemTable {",
+      "        entries: BTreeMap::new(),",
+      "        capacity_bytes,",
+      "    }",
+      "}",
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "orbit-kv-engine/src/net/server.rs",
+    content: [
+      "use tokio::net::TcpListener;",
+      "use crate::storage::memtable::MemTable;",
+      "use crate::storage::wal::compute_crc32;",
+      "",
+      "pub struct KvServer {",
+      "    pub port: u16,",
+      "    pub active_connections: usize,",
+      "}",
+      "",
+      "pub fn dispatch_frame(table: &mut MemTable, key: String, payload: Vec<u8>) -> u32 {",
+      "    let rec = table.insert_entry(key, payload.clone());",
+      "    compute_crc32(&rec.payload)",
+      "}",
+      "",
+      "pub fn start_rpc_listener(mut table: MemTable, port: u16) -> KvServer {",
+      '    let _checksum = dispatch_frame(&mut table, String::from("health"), vec![1, 2, 3]);',
+      "    KvServer {",
+      "        port,",
+      "        active_connections: 1,",
+      "    }",
+      "}",
+    ].join("\n"),
+    type: "",
+  },
+];
+
+const CPP_ENGINE_FILES: SampleTemplateFile[] = [
+  {
+    relativePath: "chrono-physics-engine/CMakeLists.txt",
+    content: [
+      "cmake_minimum_required(VERSION 3.24)",
+      "project(ChronoPhysicsEngine LANGUAGES CXX)",
+      "set(CMAKE_CXX_STANDARD 20)",
+      "include_directories(include)",
+      "add_executable(chrono_sim src/main.cpp src/engine/world.cpp src/renderer/pipeline.cpp)",
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "chrono-physics-engine/README.md",
+    content:
+      "# Chrono C++20 Rigid-Body Physics & Vulkan Renderer\n\nDeterministic rigid-body simulation engine with SIMD vector math and frame-graph rendering.",
+    type: "text/markdown",
+  },
+  {
+    relativePath: "chrono-physics-engine/include/math/vec3.hpp",
+    content: [
+      "#pragma once",
+      "#include <cmath>",
+      "",
+      "struct Vec3 {",
+      "    float x;",
+      "    float y;",
+      "    float z;",
+      "};",
+      "",
+      "inline Vec3 addVec3(const Vec3& a, const Vec3& b) {",
+      "    return Vec3{a.x + b.x, a.y + b.y, a.z + b.z};",
+      "}",
+      "",
+      "inline Vec3 scaleVec3(const Vec3& v, float s) {",
+      "    return Vec3{v.x * s, v.y * s, v.z * s};",
+      "}",
+      "",
+      "inline float dotVec3(const Vec3& a, const Vec3& b) {",
+      "    return a.x * b.x + a.y * b.y + a.z * b.z;",
+      "}",
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "chrono-physics-engine/include/engine/world.hpp",
+    content: [
+      "#pragma once",
+      "#include <vector>",
+      '#include "math/vec3.hpp"',
+      "",
+      "struct RigidBody {",
+      "    int id;",
+      "    Vec3 position;",
+      "    Vec3 velocity;",
+      "    float mass;",
+      "};",
+      "",
+      "class PhysicsWorld {",
+      "public:",
+      "    void stepSimulation(float dt);",
+      "    RigidBody integrateBody(const RigidBody& body, float dt);",
+      "};",
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "chrono-physics-engine/src/engine/world.cpp",
+    content: [
+      '#include "engine/world.hpp"',
+      '#include "math/vec3.hpp"',
+      "",
+      "RigidBody integrateBody(const RigidBody& body, float dt) {",
+      "    Vec3 delta = scaleVec3(body.velocity, dt);",
+      "    Vec3 nextPos = addVec3(body.position, delta);",
+      "    return RigidBody{body.id, nextPos, body.velocity, body.mass};",
+      "}",
+      "",
+      "void stepSimulation(float dt) {",
+      "    RigidBody probe{1, Vec3{0.0f, 10.0f, 0.0f}, Vec3{1.5f, -9.8f, 0.0f}, 2.0f};",
+      "    RigidBody updated = integrateBody(probe, dt);",
+      "    float energy = dotVec3(updated.velocity, updated.velocity);",
+      "    (void)energy;",
+      "}",
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "chrono-physics-engine/include/renderer/pipeline.hpp",
+    content: [
+      "#pragma once",
+      '#include "math/vec3.hpp"',
+      '#include "engine/world.hpp"',
+      "",
+      "class RenderPipeline {",
+      "public:",
+      "    void renderFrame(float dt);",
+      "};",
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "chrono-physics-engine/src/renderer/pipeline.cpp",
+    content: [
+      "#include <iostream>",
+      '#include "renderer/pipeline.hpp"',
+      '#include "engine/world.hpp"',
+      '#include "math/vec3.hpp"',
+      "",
+      "void submitDrawCall(const Vec3& cameraPos) {",
+      "    float distSq = dotVec3(cameraPos, cameraPos);",
+      "    (void)distSq;",
+      "}",
+      "",
+      "void renderFrame(float dt) {",
+      "    stepSimulation(dt);",
+      "    Vec3 cam = addVec3(Vec3{0.0f, 5.0f, -12.0f}, Vec3{0.0f, 0.0f, 1.0f});",
+      "    submitDrawCall(cam);",
+      "}",
+    ].join("\n"),
+    type: "",
+  },
+  {
+    relativePath: "chrono-physics-engine/src/main.cpp",
+    content: [
+      "#include <iostream>",
+      '#include "engine/world.hpp"',
+      '#include "renderer/pipeline.hpp"',
+      "",
+      "int main() {",
+      "    const float timeStep = 0.0166f;",
+      "    stepSimulation(timeStep);",
+      "    renderFrame(timeStep);",
+      "    return 0;",
+      "}",
+    ].join("\n"),
+    type: "",
+  },
+];
+
 /* ------------------------------------------------------------------ */
 /* Scenario assembly                                                    */
 /* ------------------------------------------------------------------ */
@@ -659,10 +983,23 @@ export interface SampleScenario {
 export function getScenarioProject(id: SampleScenarioId): SampleScenario {
   switch (id) {
     case "clean":
+    case "web":
       return {
         id,
         rootName: "acme-saas-platform",
         files: sampleFilesData.map(toFile),
+      };
+    case "rust":
+      return {
+        id,
+        rootName: "orbit-kv-engine",
+        files: RUST_ENGINE_FILES.map(toFile),
+      };
+    case "cpp":
+      return {
+        id,
+        rootName: "chrono-physics-engine",
+        files: CPP_ENGINE_FILES.map(toFile),
       };
     case "heavy":
       return {

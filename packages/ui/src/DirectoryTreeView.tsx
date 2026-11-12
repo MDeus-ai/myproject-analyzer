@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Folder,
   FolderOpen,
@@ -18,6 +18,8 @@ import { FolderNode, ProcessedFile } from "@myproject/core/types";
 import { formatBytes, getFileCategory } from "@myproject/core/fileHelpers";
 import { generateTreeText } from "@myproject/core/treeBuilder";
 import { copyToClipboard } from "@myproject/core/clipboard";
+import { useDebouncedValue } from "./useDebouncedValue";
+import { useVirtualRows } from "./useVirtualRows";
 
 interface DirectoryTreeViewProps {
   rootNode: FolderNode;
@@ -45,6 +47,26 @@ function computeInitialCollapsed(
   return collapsed;
 }
 
+type FlatTreeItem =
+  | {
+      kind: "folder";
+      key: string;
+      node: FolderNode;
+      level: number;
+      isCollapsed: boolean;
+    }
+  | {
+      kind: "file";
+      key: string;
+      file: ProcessedFile;
+      level: number;
+    };
+
+const TREE_ROW_H = 32;
+/** Below this threshold we render nested DOM containers with vertical guide borders;
+ *  above it (e.g. Expand All on a huge repo) we switch to virtualized windowing. */
+const VIRTUALIZE_THRESHOLD = 250;
+
 export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
   rootNode,
   onSelectFile,
@@ -53,6 +75,7 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
     computeInitialCollapsed(rootNode, 2),
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(searchQuery, 120);
   const [copiedTree, setCopiedTree] = useState(false);
 
   // New project / rebuilt tree → reset to the default expansion and drop
@@ -103,9 +126,81 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
     }
   };
 
+  // Precompute flat visible items so we know whether to window huge trees
+  // and so search prunes folders that have zero matching descendants.
+  const flatItems = useMemo<FlatTreeItem[]>(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    const out: FlatTreeItem[] = [];
+
+    // When searching, compute which folders contain at least one matching file
+    const folderHasMatch = new Set<string>();
+    if (q) {
+      const checkMatch = (node: FolderNode): boolean => {
+        let hit = node.name.toLowerCase().includes(q);
+        for (const f of node.files) {
+          if (f.name.toLowerCase().includes(q)) hit = true;
+        }
+        for (const sub of node.subfolders.values()) {
+          if (checkMatch(sub)) hit = true;
+        }
+        if (hit) folderHasMatch.add(node.relativePath);
+        return hit;
+      };
+      checkMatch(rootNode);
+    }
+
+    const walk = (node: FolderNode, level: number) => {
+      if (q && level > 0 && !folderHasMatch.has(node.relativePath)) {
+        return;
+      }
+      const isCollapsed = !q && collapsedPaths.has(node.relativePath);
+      out.push({
+        kind: "folder",
+        key: `folder:${node.relativePath || node.name}`,
+        node,
+        level,
+        isCollapsed,
+      });
+      if (isCollapsed) return;
+
+      const subfolderEntries = Array.from(node.subfolders.entries()).sort(
+        ([a], [b]) => a.localeCompare(b),
+      );
+      for (const [, subNode] of subfolderEntries) {
+        walk(subNode, level + 1);
+      }
+
+      const sortedFiles = [...node.files].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
+      for (const file of sortedFiles) {
+        if (q && !file.name.toLowerCase().includes(q)) continue;
+        out.push({
+          kind: "file",
+          key: `file:${file.id}`,
+          file,
+          level: level + 1,
+        });
+      }
+    };
+
+    walk(rootNode, 0);
+    return out;
+  }, [rootNode, collapsedPaths, debouncedQuery]);
+
+  const isVirtualized = flatItems.length > VIRTUALIZE_THRESHOLD;
+  const {
+    ref: scrollRef,
+    start,
+    end,
+    padTop,
+    padBottom,
+    onScroll,
+  } = useVirtualRows(isVirtualized ? flatItems.length : 0, TREE_ROW_H);
+
   const renderNode = (node: FolderNode, level: number = 0): React.ReactNode => {
-    // While searching, ignore the collapsed state so matches are visible.
-    const isCollapsed = !searchQuery && collapsedPaths.has(node.relativePath);
+    const q = debouncedQuery.trim().toLowerCase();
+    const isCollapsed = !q && collapsedPaths.has(node.relativePath);
     const subfolderEntries = Array.from(node.subfolders.entries()).sort(
       ([a], [b]) => a.localeCompare(b),
     );
@@ -163,8 +258,7 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
 
             {files.map((file) => {
               const matchesSearch =
-                !searchQuery ||
-                file.name.toLowerCase().includes(searchQuery.toLowerCase());
+                !q || file.name.toLowerCase().includes(q);
               if (!matchesSearch) return null;
 
               return (
@@ -264,11 +358,95 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
       </div>
 
       {/* Tree Visual Container — horizontal scroll for deep nesting on phones */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+      <div
+        ref={scrollRef}
+        onScroll={isVirtualized ? onScroll : undefined}
+        className="flex-1 overflow-y-auto p-4 sm:p-6"
+      >
         <div className="max-w-4xl mx-auto surface-card rounded-2xl border border-chrome p-4 sm:p-6 shadow-lg overflow-x-auto">
-          <div className="min-w-max pr-2">{renderNode(rootNode, 0)}</div>
+          {!isVirtualized ? (
+            <div className="min-w-max pr-2">{renderNode(rootNode, 0)}</div>
+          ) : (
+            <div
+              className="min-w-max pr-2 select-none"
+              style={{ paddingTop: padTop, paddingBottom: padBottom }}
+            >
+              {flatItems.slice(start, end).map((item) => {
+                if (item.kind === "folder") {
+                  const { node, level, isCollapsed } = item;
+                  return (
+                    <div
+                      key={item.key}
+                      onClick={() => toggleFolder(node.relativePath)}
+                      style={{
+                        paddingLeft: `${Math.max(level * 20, 8)}px`,
+                        height: TREE_ROW_H,
+                      }}
+                      className="flex items-center space-x-2 px-2 rounded-lg hover:bg-[var(--surface-hover)] cursor-pointer text-slate-200 transition-colors group"
+                    >
+                      <button
+                        type="button"
+                        className="text-slate-400 group-hover:text-slate-200 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFolder(node.relativePath);
+                        }}
+                      >
+                        {isCollapsed ? (
+                          <ChevronRight className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )}
+                      </button>
+
+                      {isCollapsed ? (
+                        <Folder className="w-4 h-4 text-slate-400 shrink-0" />
+                      ) : (
+                        <FolderOpen className="w-4 h-4 text-slate-300 shrink-0" />
+                      )}
+
+                      <span className="font-semibold text-xs tracking-tight text-slate-100 font-mono">
+                        {node.name}/
+                      </span>
+
+                      <div className="flex items-center space-x-1.5 text-[10px] ml-auto">
+                        <span className="px-1.5 py-0.5 rounded surface-raised text-slate-400 font-mono border border-subtle">
+                          {node.totalFilesCount} files
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded surface-raised text-slate-400 font-mono border border-subtle">
+                          {formatBytes(node.totalSize)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const { file, level } = item;
+                return (
+                  <div
+                    key={item.key}
+                    onClick={() => onSelectFile(file)}
+                    style={{
+                      paddingLeft: `${Math.max(level * 20, 8)}px`,
+                      height: TREE_ROW_H,
+                    }}
+                    className="flex items-center space-x-2 px-2 rounded-lg hover:bg-[var(--surface-hover)] cursor-pointer transition-colors text-slate-300 text-xs font-mono group"
+                  >
+                    <span className="shrink-0">{renderFileIcon(file)}</span>
+                    <span className="truncate group-hover:text-slate-100 transition-colors font-sans font-medium">
+                      {file.name}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono ml-auto">
+                      {formatBytes(file.size)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
+

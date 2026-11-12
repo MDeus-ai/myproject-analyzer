@@ -27,7 +27,6 @@ import {
 import {
   generateFolderPdf,
   getPdfBlobUrl,
-  downloadPdf,
 } from "@myproject/core/pdfGenerator";
 import { formatBytes, formatDate } from "@myproject/core/fileHelpers";
 import {
@@ -35,6 +34,7 @@ import {
   flattenDirectoryInventory,
 } from "@myproject/core/treeBuilder";
 import { downloadElementAsImage } from "@myproject/core/imageExporter";
+import { getPlatform } from "@myproject/platform";
 import { PdfCanvasViewer } from "./PdfCanvasViewer";
 
 interface PdfArchitectViewProps {
@@ -44,6 +44,9 @@ interface PdfArchitectViewProps {
 }
 
 const PDF_REGEN_DEBOUNCE_MS = 350;
+/** Cap DOM rows rendered inside the interactive Sheet View preview so switching
+ *  tabs on a 5,000+ file repository stays under 16ms. Full PDF export includes all files. */
+const MAX_SHEET_PREVIEW_ROWS = 300;
 
 /** Sheet-view equivalents of the PDF font choices (fonts available in the app). */
 const SHEET_FONT_MAP: Record<PdfTreeFont, string> = {
@@ -135,7 +138,8 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
     const doc = generateFolderPdf(rootNode, stats, files, pdfOptions);
     const dateStr = new Date().toISOString().split("T")[0];
     const safeName = stats.rootName.replace(/[^a-zA-Z0-9_-]/g, "_");
-    downloadPdf(doc, `${safeName}_structure_${dateStr}.pdf`);
+    const pdfBlob = doc.output("blob");
+    void getPlatform().saveBlob(pdfBlob, `${safeName}_structure_${dateStr}.pdf`);
   };
 
   const handleDownloadImage = async (format: "png" | "jpeg" = "png") => {
@@ -162,6 +166,7 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
         element,
         `${safeName}_structure_${dateStr}.${format}`,
         format,
+        (blob, suggestedName) => getPlatform().saveBlob(blob, suggestedName),
       );
     } catch (err) {
       console.error("Failed to export image:", err);
@@ -787,32 +792,51 @@ export const PdfArchitectView: React.FC<PdfArchitectViewProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 text-slate-700 font-mono text-[11px]">
-                        {inventory.map((item) => (
-                          <tr key={item.index} className="hover:bg-slate-50">
-                            <td className="py-2 px-3 text-center text-slate-400">
-                              {item.index}
-                            </td>
-                            <td className="py-2 px-3 font-semibold text-slate-900">
-                              {item.directory}
-                            </td>
-                            <td className="py-2 px-3 font-sans font-medium text-slate-800">
-                              {item.filename}
-                            </td>
-                            <td className="py-2 px-2 text-center uppercase font-bold text-slate-500">
-                              {item.extension}
-                            </td>
-                            {pdfOptions.includeSizes && (
-                              <td className="py-2 px-3 text-right">
-                                {formatBytes(item.size)}
+                        {inventory
+                          .slice(0, MAX_SHEET_PREVIEW_ROWS)
+                          .map((item) => (
+                            <tr key={item.index} className="hover:bg-slate-50">
+                              <td className="py-2 px-3 text-center text-slate-400">
+                                {item.index}
                               </td>
-                            )}
-                            {pdfOptions.includeDates && (
-                              <td className="py-2 px-3 text-center text-slate-500">
-                                {formatDate(item.lastModified)}
+                              <td className="py-2 px-3 font-semibold text-slate-900">
+                                {item.directory}
                               </td>
-                            )}
+                              <td className="py-2 px-3 font-sans font-medium text-slate-800">
+                                {item.filename}
+                              </td>
+                              <td className="py-2 px-2 text-center uppercase font-bold text-slate-500">
+                                {item.extension}
+                              </td>
+                              {pdfOptions.includeSizes && (
+                                <td className="py-2 px-3 text-right">
+                                  {formatBytes(item.size)}
+                                </td>
+                              )}
+                              {pdfOptions.includeDates && (
+                                <td className="py-2 px-3 text-center text-slate-500">
+                                  {formatDate(item.lastModified)}
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        {inventory.length > MAX_SHEET_PREVIEW_ROWS && (
+                          <tr className="bg-slate-50">
+                            <td
+                              colSpan={
+                                4 +
+                                (pdfOptions.includeSizes ? 1 : 0) +
+                                (pdfOptions.includeDates ? 1 : 0)
+                              }
+                              className="py-2.5 px-3 text-center text-slate-500 font-sans text-xs italic"
+                            >
+                              Showing first {MAX_SHEET_PREVIEW_ROWS.toLocaleString()}{" "}
+                              of {inventory.length.toLocaleString()} files in live
+                              sheet preview — all {inventory.length.toLocaleString()}{" "}
+                              files are included in the Vector PDF export.
+                            </td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>

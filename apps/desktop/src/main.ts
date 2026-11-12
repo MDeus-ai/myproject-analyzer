@@ -20,11 +20,14 @@ import {
   dialog,
   ipcMain,
   Menu,
+  net,
+  protocol,
   screen,
   session,
   shell,
 } from "electron";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import {
   copyFile,
@@ -41,6 +44,11 @@ import {
   type ApplyChangeIpcFile,
   type ApplyChangesIpcOptions,
   type ApplyChangesIpcResult,
+  type EngineBuildGraphIpcResult,
+  type EngineEstimateTokensIpcResult,
+  type EngineFileInputIpc,
+  type EngineSearchIpcResult,
+  type EngineSearchOptionsIpc,
   type PickFolderIpcResult,
   type SaveFileIpcResult,
   type StartWatchIpcOptions,
@@ -67,6 +75,27 @@ import {
   saveWindowState,
   windowStateFile,
 } from "./window-state";
+import {
+  ASSET_PROTOCOL_SCHEME,
+  resolveAllowedAssetUrl,
+} from "./asset-protocol";
+import {
+  handleEngineBuildGraph,
+  handleEngineEstimateTokens,
+  handleEngineSearch,
+} from "./rust-engine";
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: ASSET_PROTOCOL_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 const DEV_SERVER_URL =
   process.env.VITE_DEV_SERVER_URL ?? "http://localhost:3000";
@@ -558,6 +587,60 @@ function registerIpc(): void {
       };
     },
   );
+
+  const readAllowedText = async (absPath: string): Promise<string | null> => {
+    if (typeof absPath !== "string" || !isUnderAllowedRoot(absPath)) {
+      return null;
+    }
+    return readTextGated(absPath);
+  };
+
+  ipcMain.handle(
+    DesktopIpc.engineBuildGraph,
+    async (
+      _event,
+      files: EngineFileInputIpc[],
+    ): Promise<EngineBuildGraphIpcResult> => {
+      return handleEngineBuildGraph(
+        Array.isArray(files) ? files : [],
+        readAllowedText,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    DesktopIpc.engineSearch,
+    async (
+      _event,
+      files: EngineFileInputIpc[],
+      opts: EngineSearchOptionsIpc,
+      symbolsMapJson: string | null,
+    ): Promise<EngineSearchIpcResult> => {
+      return handleEngineSearch(
+        Array.isArray(files) ? files : [],
+        opts ?? { query: "" },
+        typeof symbolsMapJson === "string" ? symbolsMapJson : null,
+        readAllowedText,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    DesktopIpc.engineEstimateTokens,
+    async (
+      _event,
+      files: EngineFileInputIpc[],
+      includeToc: boolean,
+      includeLineNumbers: boolean,
+    ): Promise<EngineEstimateTokensIpcResult> => {
+      return handleEngineEstimateTokens(
+        Array.isArray(files) ? files : [],
+        Boolean(includeToc),
+        Boolean(includeLineNumbers),
+        readAllowedText,
+      );
+    },
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -606,6 +689,20 @@ if (!gotSingleInstanceLock) {
         event.preventDefault();
         console.warn("[security] blocked <webview> attachment");
       });
+    });
+
+    // Custom asset protocol for path-backed desktop image previews,
+    // strictly gated to folders the user picked via the native dialog.
+    protocol.handle(ASSET_PROTOCOL_SCHEME, async (request) => {
+      const resolved = resolveAllowedAssetUrl(request.url, allowedRoots);
+      if (!resolved) {
+        return new Response("Forbidden", { status: 403 });
+      }
+      try {
+        return await net.fetch(pathToFileURL(resolved).toString());
+      } catch {
+        return new Response("Not Found", { status: 404 });
+      }
     });
 
     registerIpc();

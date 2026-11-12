@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   X,
   Download,
@@ -13,9 +13,14 @@ import {
   FolderTree,
 } from "lucide-react";
 import { ProcessedFile } from "@myproject/core/types";
-import { formatBytes, formatDate, getFileCategory } from "@myproject/core/fileHelpers";
-import { triggerFileDownload } from "@myproject/core/zipExporter";
+import {
+  formatBytes,
+  formatDate,
+  getFileCategory,
+} from "@myproject/core/fileHelpers";
 import { copyToClipboard } from "@myproject/core/clipboard";
+import { getPlatform } from "@myproject/platform";
+import { CodeSyntaxHighlighter } from "./CodeSyntaxHighlighter";
 
 interface FilePreviewModalProps {
   file: ProcessedFile | null;
@@ -26,25 +31,73 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   file,
   onClose,
 }) => {
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
+  const [resolvedPreviewUrl, setResolvedPreviewUrl] = useState<
+    string | undefined
+  >(undefined);
+  const [hydratedText, setHydratedText] = useState<string | undefined>(
+    undefined,
+  );
+
+  useEffect(() => {
+    if (!file) {
+      setResolvedPreviewUrl(undefined);
+      setHydratedText(undefined);
+      return;
+    }
+
+    const platform = getPlatform();
+    const cat = getFileCategory(file.name, file.type);
+    let createdUrl: string | undefined;
+
+    if (cat === "image") {
+      createdUrl = platform.createPreviewUrl?.(file) ?? file.previewUrl;
+      setResolvedPreviewUrl(createdUrl);
+    } else {
+      setResolvedPreviewUrl(file.previewUrl);
+    }
+
+    setHydratedText(file.textContent);
+    let cancelled = false;
+    if (file.textContent === undefined && file.source?.kind === "path") {
+      void platform.readText(file).then((text) => {
+        if (!cancelled && text !== undefined) {
+          setHydratedText(text);
+        }
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      if (createdUrl && createdUrl !== file.previewUrl) {
+        platform.revokePreviewUrl?.(createdUrl);
+      }
+    };
+  }, [file]);
 
   if (!file) return null;
 
+  const textToDisplay = hydratedText ?? file.textContent;
+
   const handleCopyContent = async () => {
-    if (!file.textContent) return;
-    const succeeded = await copyToClipboard(file.textContent);
+    if (!textToDisplay) return;
+    const succeeded = await copyToClipboard(textToDisplay);
     if (succeeded) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  const handleDownload = () => {
-    if (file.blob) {
-      triggerFileDownload(file.blob, file.flattenedName);
-    } else if (file.textContent) {
-      const blob = new Blob([file.textContent], { type: file.type });
-      triggerFileDownload(blob, file.flattenedName);
+  const handleDownload = async () => {
+    const platform = getPlatform();
+    const blob = file.source?.blob ?? file.blob;
+    if (blob) {
+      await platform.saveBlob(blob, file.flattenedName);
+    } else if (textToDisplay !== undefined) {
+      const textBlob = new Blob([textToDisplay], {
+        type: file.type || "text/plain",
+      });
+      await platform.saveBlob(textBlob, file.flattenedName);
     }
   };
 
@@ -83,7 +136,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
-            {file.textContent && (
+            {textToDisplay && (
               <button
                 type="button"
                 onClick={handleCopyContent}
@@ -106,7 +159,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
             <button
               type="button"
-              onClick={handleDownload}
+              onClick={() => void handleDownload()}
               className="flex items-center space-x-1.5 text-xs px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors shadow-sm"
               title="Download this file"
             >
@@ -157,19 +210,21 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
         {/* Content Viewer */}
         <div className="flex-1 overflow-y-auto p-6">
-          {category === "image" && file.previewUrl ? (
+          {category === "image" && resolvedPreviewUrl ? (
             <div className="flex items-center justify-center p-4 surface-inset rounded-xl border border-subtle">
               <img
-                src={file.previewUrl}
+                src={resolvedPreviewUrl}
                 alt={file.name}
                 className="max-h-96 max-w-full object-contain rounded-lg"
               />
             </div>
-          ) : file.textContent ? (
-            <div className="surface-inset rounded-xl p-4 border border-subtle overflow-x-auto">
-              <pre className="font-mono text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
-                {file.textContent}
-              </pre>
+          ) : textToDisplay ? (
+            <div className="code-well rounded-xl py-3 border border-subtle overflow-x-auto">
+              <CodeSyntaxHighlighter
+                code={textToDisplay}
+                filePath={file.relativePath}
+                showLineNumbers={true}
+              />
             </div>
           ) : (
             <div className="text-center py-12 text-slate-500">
@@ -188,3 +243,4 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     </div>
   );
 };
+

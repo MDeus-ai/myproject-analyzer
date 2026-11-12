@@ -15,7 +15,41 @@
 import { ProcessedFile } from "@myproject/core/types";
 import { getDepLenzEngine } from "@myproject/core/engineBridge";
 
-export type SymbolKind = "function" | "component" | "hook" | "method" | "class";
+export type SymbolKind =
+  | "function"
+  | "component"
+  | "hook"
+  | "method"
+  | "class"
+  | "struct"
+  | "trait";
+
+export type CodebaseStackKind = "web" | "rust" | "cpp" | "polyglot";
+
+export interface ProjectStackSummary {
+  primary: CodebaseStackKind;
+  label: string;
+  languages: string[];
+}
+
+export interface ModuleCluster {
+  id: string;
+  name: string;
+  role: string;
+  language: string;
+  fileCount: number;
+  symbolIds: string[];
+  inboundCalls: number;
+  outboundCalls: number;
+}
+
+export interface ModuleCommunicationEdge {
+  id: string;
+  sourceModule: string;
+  targetModule: string;
+  callCount: number;
+  examples: string[];
+}
 
 export interface DepLenzSymbol {
   id: string; // e.g. "src/utils/treeBuilder.ts:buildFolderTree"
@@ -31,6 +65,8 @@ export interface DepLenzSymbol {
   isDefaultExport: boolean;
   docComment?: string;
   calls: string[]; // names of other symbols invoked in body
+  language?: "ts" | "js" | "rust" | "cpp" | "other";
+  moduleName?: string;
 }
 
 export interface FileImport {
@@ -45,15 +81,17 @@ export interface FileImport {
   /** export { X } from "./y" / export * from "./y" (barrel files). */
   isReExport?: boolean;
   starReExport?: boolean;
-  /** import("./y") — lazy / code-split edges. */
+  /** import("./y") — lazy / code-split edges, or C/C++ #include wildcards. */
   isDynamic?: boolean;
+  /** True when an import brings all exported symbols of the target file into scope (e.g. C/C++ #include "foo.h" or Rust `use mod::*`). */
+  isWildcardInclude?: boolean;
 }
 
-/** A type/interface/enum declaration — included in surgical bundles so the
+/** A type/interface/enum/struct/trait declaration — included in surgical bundles so the
  *  LLM sees the real contracts behind signatures. */
 export interface TypeDeclaration {
   name: string;
-  kind: "interface" | "type" | "enum";
+  kind: "interface" | "type" | "enum" | "struct" | "trait" | "class";
   filePath: string;
   lineStart: number;
   lineEnd: number;
@@ -67,7 +105,7 @@ export interface DepLenzGraphNode {
   symbol: DepLenzSymbol;
   dependencies: { symbol: DepLenzSymbol; viaImport?: string }[]; // callees
   dependents: { symbol: DepLenzSymbol; viaImport?: string }[]; // callers
-  externalDependencies: string[]; // e.g. 'react', 'lodash'
+  externalDependencies: string[]; // e.g. 'react', 'lodash', 'tokio', '<vector>'
   /** Direct edges in both directions (kept for backward compatibility). */
   impactRadius: number;
   impactLevel: "low" | "medium" | "high";
@@ -144,18 +182,24 @@ export interface DepLenzAnalysisResult {
   totalFunctions: number;
   totalComponents: number;
   totalHooks: number;
+  totalStructs?: number;
+  totalTraits?: number;
+  totalClasses?: number;
   totalDependenciesMapped: number;
   analyzedFilesCount: number;
   diagnostics: SyntaxDiagnostic[];
   totalSyntaxWarnings: number;
   filesWithSyntaxErrors: string[];
+  projectStack?: ProjectStackSummary;
+  moduleClusters?: ModuleCluster[];
+  moduleEdges?: ModuleCommunicationEdge[];
 }
 
 /* ------------------------------------------------------------------ */
-/* Web Dev File Filter Helpers                                        */
+/* Multi-Language File Filter Helpers (Web Dev + Rust + C/C++)        */
 /* ------------------------------------------------------------------ */
 
-const WEB_DEV_EXTENSIONS = new Set([
+const WEB_AND_SYSTEMS_EXTENSIONS = new Set([
   "ts",
   "tsx",
   "js",
@@ -168,18 +212,156 @@ const WEB_DEV_EXTENSIONS = new Set([
   "css",
   "scss",
   "json",
+  "rs",
+  "c",
+  "cc",
+  "cpp",
+  "cxx",
+  "h",
+  "hh",
+  "hpp",
+  "hxx",
+  "ino",
+  "toml",
 ]);
+
+const CODE_FILE_EXTENSIONS = new Set([
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "vue",
+  "svelte",
+  "rs",
+  "c",
+  "cc",
+  "cpp",
+  "cxx",
+  "h",
+  "hh",
+  "hpp",
+  "hxx",
+  "ino",
+]);
+
+const CPP_EXTENSIONS = new Set([
+  "c",
+  "cc",
+  "cpp",
+  "cxx",
+  "h",
+  "hh",
+  "hpp",
+  "hxx",
+  "ino",
+]);
+
+export function isRustFilePath(filePathOrExt: string): boolean {
+  const clean = filePathOrExt.toLowerCase();
+  return clean === "rs" || clean.endsWith(".rs");
+}
+
+export function isCppFilePath(filePathOrExt: string): boolean {
+  const clean = filePathOrExt.toLowerCase();
+  if (CPP_EXTENSIONS.has(clean)) return true;
+  const dot = clean.lastIndexOf(".");
+  return dot !== -1 && CPP_EXTENSIONS.has(clean.slice(dot + 1));
+}
+
+export function detectFileLanguageTag(
+  filePath: string,
+): "ts" | "js" | "rust" | "cpp" | "other" {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith(".rs")) return "rust";
+  if (isCppFilePath(lower)) return "cpp";
+  if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "ts";
+  if (
+    lower.endsWith(".js") ||
+    lower.endsWith(".jsx") ||
+    lower.endsWith(".mjs") ||
+    lower.endsWith(".cjs") ||
+    lower.endsWith(".vue") ||
+    lower.endsWith(".svelte")
+  ) {
+    return "js";
+  }
+  return "other";
+}
+
+export function detectFenceLanguage(filePath: string): string {
+  const tag = detectFileLanguageTag(filePath);
+  if (tag === "rust") return "rust";
+  if (tag === "cpp") return "cpp";
+  if (tag === "js") return "javascript";
+  return "typescript";
+}
+
+export function detectCodebaseStack(
+  files: ProcessedFile[],
+): ProjectStackSummary {
+  let webCount = 0;
+  let rustCount = 0;
+  let cppCount = 0;
+  const langs = new Set<string>();
+
+  for (const f of files) {
+    const ext = f.extension.toLowerCase();
+    if (ext === "rs") {
+      rustCount++;
+      langs.add("Rust");
+    } else if (CPP_EXTENSIONS.has(ext)) {
+      cppCount++;
+      langs.add(ext === "c" ? "C" : "C++");
+    } else if (["ts", "tsx"].includes(ext)) {
+      webCount++;
+      langs.add("TypeScript");
+    } else if (["js", "jsx", "mjs", "cjs", "vue", "svelte"].includes(ext)) {
+      webCount++;
+      langs.add("JavaScript");
+    }
+  }
+
+  const activeStacks =
+    (webCount > 0 ? 1 : 0) + (rustCount > 0 ? 1 : 0) + (cppCount > 0 ? 1 : 0);
+
+  if (activeStacks > 1) {
+    return {
+      primary: "polyglot",
+      label: `Polyglot Lens (${Array.from(langs).join(" + ")})`,
+      languages: Array.from(langs),
+    };
+  }
+  if (rustCount > 0) {
+    return {
+      primary: "rust",
+      label: "Rust Systems Lens",
+      languages: Array.from(langs),
+    };
+  }
+  if (cppCount > 0) {
+    return {
+      primary: "cpp",
+      label: "C/C++ Native Lens",
+      languages: Array.from(langs),
+    };
+  }
+  return {
+    primary: "web",
+    label: "Web Dev Codebase Lens",
+    languages: langs.size > 0 ? Array.from(langs) : ["TypeScript", "JavaScript"],
+  };
+}
 
 export function isWebDevFile(file: ProcessedFile): boolean {
   const ext = file.extension.toLowerCase();
-  return WEB_DEV_EXTENSIONS.has(ext);
+  return WEB_AND_SYSTEMS_EXTENSIONS.has(ext);
 }
 
 export function isCodeFile(file: ProcessedFile): boolean {
   const ext = file.extension.toLowerCase();
-  return ["ts", "tsx", "js", "jsx", "mjs", "cjs", "vue", "svelte"].includes(
-    ext,
-  );
+  return CODE_FILE_EXTENSIONS.has(ext);
 }
 
 /* ------------------------------------------------------------------ */
@@ -296,7 +478,7 @@ function scanBalancedParams(
       afterArrow: true,
     };
   }
-  const retM = /^\s*:\s*([^={;]+?)\s*(?:[{;]|$)/.exec(tail);
+  const retM = /^\s*(?::|->)\s*([^={;]+?)\s*(?:where\b|[{;]|$)/.exec(tail);
   return {
     params: buf.join(""),
     returnType: retM ? retM[1].trim() : "",
@@ -305,12 +487,404 @@ function scanBalancedParams(
 }
 
 /* ------------------------------------------------------------------ */
-/* Static Symbol Extraction for Web Dev Stacks                         */
+/* Static Symbol Extraction for Web Dev, Rust, and C/C++ Stacks       */
 /* ------------------------------------------------------------------ */
+
+/** Fast 32-bit FNV-1a content fingerprint for per-file parse caching. */
+function fingerprintContent(content: string): string {
+  let h = 0x811c9dc5;
+  const len = content.length;
+  // Sample every char for <= 64KB, or stride for huge files so hashing is sub-0.1ms
+  const step = len > 65536 ? Math.floor(len / 32768) : 1;
+  for (let i = 0; i < len; i += step) {
+    h ^= content.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `${len}:${h >>> 0}`;
+}
+
+const MAX_FILE_CACHE_ENTRIES = 12000;
+const symbolExtractCache = new Map<string, DepLenzSymbol[]>();
+const typeExtractCache = new Map<string, TypeDeclaration[]>();
+const lazyExtractCache = new Map<string, LazyBinding[]>();
+const syntaxDiagnosticCache = new Map<string, SyntaxDiagnostic[]>();
+
+function setBoundedCache<T>(map: Map<string, T>, key: string, value: T): void {
+  if (map.size >= MAX_FILE_CACHE_ENTRIES) {
+    // Evict oldest ~20% of entries
+    let count = 0;
+    const limit = Math.floor(MAX_FILE_CACHE_ENTRIES * 0.2);
+    for (const k of map.keys()) {
+      map.delete(k);
+      if (++count >= limit) break;
+    }
+  }
+  map.set(key, value);
+}
+
+export function inferModuleNameFromPath(filePath: string): string {
+  const segs = filePath.split("/").filter(Boolean);
+  if (segs.length <= 1) return "root";
+  // Strip common top-level wrapper folder if present
+  const startIdx =
+    segs.length > 2 && ["src", "lib", "include", "app", "packages", "apps"].includes(segs[1])
+      ? 2
+      : segs[0] === "src" || segs[0] === "include" || segs[0] === "lib"
+        ? 1
+        : segs.length > 2
+          ? 1
+          : 0;
+  if (startIdx >= segs.length - 1) {
+    return segs[segs.length - 2] || "core";
+  }
+  return segs.slice(startIdx, segs.length - 1).join("/") || segs[0];
+}
+
+function extractRustSymbolsFromFile(
+  lines: string[],
+  filePath: string,
+  fileName: string,
+): DepLenzSymbol[] {
+  const symbols: DepLenzSymbol[] = [];
+  const seenIds = new Set<string>();
+  const moduleName = inferModuleNameFromPath(filePath);
+
+  const fnHeadRe =
+    /^(pub(?:\s*\([^)]+\))?\s+)?(?:default\s+)?(?:const\s+)?(?:async\s+)?(?:unsafe\s+)?(?:extern\s+(?:"[^"]*"\s+)?)?fn\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:<[^{;(]*>)?\s*(\()/;
+  const structHeadRe =
+    /^(pub(?:\s*\([^)]+\))?\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)/;
+  const traitHeadRe =
+    /^(pub(?:\s*\([^)]+\))?\s+)?(?:unsafe\s+)?trait\s+([A-Za-z_][A-Za-z0-9_]*)/;
+  const implHeadRe =
+    /^impl(?:\s*<[^>]*>)?\s+(?:([A-Za-z_][A-Za-z0-9_:<>]*)\s+for\s+)?([A-Za-z_][A-Za-z0-9_]*)/;
+
+  let currentImplTarget: string | null = null;
+  let implBraceDepth = 0;
+  let runningBraceDepth = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
+
+    if (
+      !trimmed ||
+      trimmed.startsWith("//") ||
+      trimmed.startsWith("/*") ||
+      trimmed.startsWith("*") ||
+      trimmed.startsWith("#[") ||
+      trimmed.startsWith("#![")
+    ) {
+      for (const ch of rawLine) {
+        if (ch === "{") runningBraceDepth++;
+        else if (ch === "}") runningBraceDepth--;
+      }
+      if (currentImplTarget && runningBraceDepth < implBraceDepth) {
+        currentImplTarget = null;
+      }
+      continue;
+    }
+
+    const implMatch = implHeadRe.exec(trimmed);
+    if (implMatch) {
+      currentImplTarget = implMatch[2];
+      for (const ch of rawLine) {
+        if (ch === "{") runningBraceDepth++;
+        else if (ch === "}") runningBraceDepth--;
+      }
+      implBraceDepth = runningBraceDepth;
+      continue;
+    }
+
+    const fnMatch = fnHeadRe.exec(trimmed);
+    if (fnMatch) {
+      const isPub = Boolean(fnMatch[1]) || Boolean(currentImplTarget);
+      const rawName = fnMatch[2];
+      const startCol = rawLine.indexOf(trimmed) + fnMatch[0].length - 1;
+      const scan = scanBalancedParams(lines, i, startCol);
+      const params = scan ? scan.params : "";
+      const returnType = scan ? scan.returnType : "";
+      const lineStart = i + 1;
+      const isTraitMethodSig =
+        trimmed.endsWith(";") && !trimmed.includes("{");
+      const { lineEnd, body } = isTraitMethodSig
+        ? { lineEnd: i + 1, body: rawLine }
+        : extractBlockBody(lines, i);
+      const isMethod = Boolean(currentImplTarget);
+      const symbolName = rawName;
+      const id =
+        isMethod && seenIds.has(`${filePath}:${symbolName}`)
+          ? `${filePath}:${currentImplTarget}::${symbolName}`
+          : `${filePath}:${symbolName}`;
+
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        const sigPrefix = currentImplTarget
+          ? `fn ${currentImplTarget}::${rawName}`
+          : `fn ${rawName}`;
+        const signature = cleanSignature(
+          `${sigPrefix}(${params})${returnType ? ` -> ${returnType}` : ""}`,
+        );
+        symbols.push({
+          id,
+          name: symbolName,
+          kind: isMethod ? "method" : "function",
+          filePath,
+          fileName,
+          lineStart,
+          lineEnd,
+          signature,
+          body,
+          isExported: isPub,
+          isDefaultExport: rawName === "main" || rawName === "new",
+          calls: extractInvokedNames(body, rawName),
+          language: "rust",
+          moduleName,
+        });
+      }
+
+      // Advance line counter while updating brace depth for enclosing impl tracking
+      for (let k = i; k < lineEnd && k < lines.length; k++) {
+        for (const ch of lines[k]) {
+          if (ch === "{") runningBraceDepth++;
+          else if (ch === "}") runningBraceDepth--;
+        }
+      }
+      if (currentImplTarget && runningBraceDepth < implBraceDepth) {
+        currentImplTarget = null;
+      }
+      i = Math.max(i, lineEnd - 1);
+      continue;
+    }
+
+    const structMatch = structHeadRe.exec(trimmed);
+    if (structMatch) {
+      const isPub = Boolean(structMatch[1]);
+      const name = structMatch[2];
+      const lineStart = i + 1;
+      const { lineEnd, body } = trimmed.includes("{")
+        ? extractBlockBody(lines, i)
+        : { lineEnd: i + 1, body: rawLine };
+      const id = `${filePath}:${name}`;
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        symbols.push({
+          id,
+          name,
+          kind: "struct",
+          filePath,
+          fileName,
+          lineStart,
+          lineEnd,
+          signature: cleanSignature(`struct ${name}`),
+          body,
+          isExported: isPub,
+          isDefaultExport: false,
+          calls: extractInvokedNames(body, name),
+          language: "rust",
+          moduleName,
+        });
+      }
+    }
+
+    const traitMatch = traitHeadRe.exec(trimmed);
+    if (traitMatch) {
+      const isPub = Boolean(traitMatch[1]);
+      const name = traitMatch[2];
+      const lineStart = i + 1;
+      const { lineEnd, body } = extractBlockBody(lines, i);
+      const id = `${filePath}:${name}`;
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        symbols.push({
+          id,
+          name,
+          kind: "trait",
+          filePath,
+          fileName,
+          lineStart,
+          lineEnd,
+          signature: cleanSignature(`trait ${name}`),
+          body,
+          isExported: isPub,
+          isDefaultExport: false,
+          calls: extractInvokedNames(body, name),
+          language: "rust",
+          moduleName,
+        });
+      }
+    }
+
+    for (const ch of rawLine) {
+      if (ch === "{") runningBraceDepth++;
+      else if (ch === "}") runningBraceDepth--;
+    }
+    if (currentImplTarget && runningBraceDepth < implBraceDepth) {
+      currentImplTarget = null;
+    }
+  }
+
+  return symbols;
+}
+
+const CPP_CONTROL_NON_FUNCTIONS = new Set([
+  "if",
+  "for",
+  "while",
+  "switch",
+  "catch",
+  "return",
+  "sizeof",
+  "alignof",
+  "decltype",
+  "static_assert",
+  "throw",
+  "delete",
+  "new",
+  "operator",
+]);
+
+function extractCppSymbolsFromFile(
+  lines: string[],
+  filePath: string,
+  fileName: string,
+): DepLenzSymbol[] {
+  const symbols: DepLenzSymbol[] = [];
+  const seenIds = new Set<string>();
+  const moduleName = inferModuleNameFromPath(filePath);
+
+  const classOrStructRe =
+    /^(?:template\s*<[^>]*>\s*)?(class|struct)\s+(?:[A-Z0-9_]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*[^{;]+)?\{/;
+  const methodOrFnHeadRe =
+    /^(?:template\s*<[^>]*>\s*)?(?:(?:inline|static|virtual|explicit|constexpr|consteval|friend|extern)\s+)*([A-Za-z_][A-Za-z0-9_:<>,\s*&~]*?)\s+([A-Za-z_~][A-Za-z0-9_]*(?:::[A-Za-z_~][A-Za-z0-9_]*)?)\s*(\()/;
+
+  let i = 0;
+  while (i < lines.length) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
+
+    if (
+      !trimmed ||
+      trimmed.startsWith("//") ||
+      trimmed.startsWith("/*") ||
+      trimmed.startsWith("*") ||
+      trimmed.startsWith("#")
+    ) {
+      i++;
+      continue;
+    }
+
+    // 1. Class or struct block
+    const csMatch = classOrStructRe.exec(trimmed);
+    if (csMatch) {
+      const kind = csMatch[1] === "struct" ? "struct" : "class";
+      const name = csMatch[2];
+      const lineStart = i + 1;
+      const { lineEnd, body } = extractBlockBody(lines, i);
+      const id = `${filePath}:${name}`;
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        symbols.push({
+          id,
+          name,
+          kind,
+          filePath,
+          fileName,
+          lineStart,
+          lineEnd,
+          signature: cleanSignature(`${kind} ${name}`),
+          body,
+          isExported: true,
+          isDefaultExport: false,
+          calls: extractInvokedNames(body, name),
+          language: "cpp",
+          moduleName,
+        });
+      }
+      i++;
+      continue;
+    }
+
+    // 2. Function or ClassName::methodName definition
+    const fnMatch = methodOrFnHeadRe.exec(trimmed);
+    if (fnMatch) {
+      const returnTypeRaw = fnMatch[1].trim();
+      const qualifiedName = fnMatch[2].trim();
+      const shortName = qualifiedName.includes("::")
+        ? qualifiedName.split("::").pop()!
+        : qualifiedName;
+
+      if (
+        !CPP_CONTROL_NON_FUNCTIONS.has(shortName) &&
+        !CPP_CONTROL_NON_FUNCTIONS.has(returnTypeRaw) &&
+        !returnTypeRaw.startsWith("return") &&
+        !returnTypeRaw.startsWith("else")
+      ) {
+        const startCol = rawLine.indexOf(trimmed) + fnMatch[0].length - 1;
+        const scan = scanBalancedParams(lines, i, startCol);
+        if (scan) {
+          // Check if followed by `{` on this line or next line (definition vs prototype)
+          const lookahead =
+            lines[i] +
+            (i + 1 < lines.length ? "\n" + lines[i + 1] : "") +
+            (i + 2 < lines.length ? "\n" + lines[i + 2] : "");
+          const hasBody = lookahead.includes("{");
+          const isHeader =
+            filePath.endsWith(".h") ||
+            filePath.endsWith(".hpp") ||
+            filePath.endsWith(".hh") ||
+            filePath.endsWith(".hxx");
+
+          if (hasBody || isHeader) {
+            const lineStart = i + 1;
+            const { lineEnd, body } = hasBody
+              ? extractBlockBody(lines, i)
+              : { lineEnd: i + 1, body: rawLine };
+            const isMethod = qualifiedName.includes("::");
+            const id = seenIds.has(`${filePath}:${shortName}`)
+              ? `${filePath}:${qualifiedName}`
+              : `${filePath}:${shortName}`;
+
+            if (!seenIds.has(id)) {
+              seenIds.add(id);
+              const signature = cleanSignature(
+                `${returnTypeRaw} ${qualifiedName}(${scan.params})`,
+              );
+              symbols.push({
+                id,
+                name: shortName,
+                kind: isMethod ? "method" : "function",
+                filePath,
+                fileName,
+                lineStart,
+                lineEnd,
+                signature,
+                body,
+                isExported: !/\bstatic\b/.test(returnTypeRaw) || isMethod,
+                isDefaultExport: shortName === "main",
+                calls: extractInvokedNames(body, shortName),
+                language: "cpp",
+                moduleName,
+              });
+            }
+            if (hasBody) {
+              i = Math.max(i + 1, lineEnd);
+              continue;
+            }
+          }
+        }
+      }
+    }
+
+    i++;
+  }
+
+  return symbols;
+}
 
 /**
  * Parses a code file content line by line to extract functions,
- * components, hooks, methods, and classes. Signatures are extracted with
+ * components, hooks, methods, structs, traits, and classes across
+ * TypeScript/JavaScript, Rust, and C/C++. Signatures are extracted with
  * balanced scanning — never truncated, multi-line aware, return types
  * included.
  */
@@ -321,8 +895,27 @@ export function extractSymbolsFromFile(
 ): DepLenzSymbol[] {
   if (!content) return [];
 
-  const symbols: DepLenzSymbol[] = [];
+  const cacheKey = `${filePath}\0${fileName}\0${fingerprintContent(content)}`;
+  const cached = symbolExtractCache.get(cacheKey);
+  if (cached) return cached;
+
   const lines = content.split("\n");
+
+  if (isRustFilePath(filePath) || isRustFilePath(fileName)) {
+    const rustSymbols = extractRustSymbolsFromFile(lines, filePath, fileName);
+    setBoundedCache(symbolExtractCache, cacheKey, rustSymbols);
+    return rustSymbols;
+  }
+
+  if (isCppFilePath(filePath) || isCppFilePath(fileName)) {
+    const cppSymbols = extractCppSymbolsFromFile(lines, filePath, fileName);
+    setBoundedCache(symbolExtractCache, cacheKey, cppSymbols);
+    return cppSymbols;
+  }
+
+  const symbols: DepLenzSymbol[] = [];
+  const langTag = detectFileLanguageTag(filePath);
+  const moduleName = inferModuleNameFromPath(filePath);
 
   // Head patterns capture the NAME and (for callables) end exactly at the
   // opening "(" — parameter text is then balanced-scanned, never regexed.
@@ -416,6 +1009,8 @@ export function extractSymbolsFromFile(
           isExported,
           isDefaultExport,
           calls: extractInvokedNames(body, name),
+          language: langTag,
+          moduleName,
         });
         i = Math.max(i + 1, lineEnd);
         continue;
@@ -445,6 +1040,8 @@ export function extractSymbolsFromFile(
         isExported,
         isDefaultExport,
         calls,
+        language: langTag,
+        moduleName,
       });
 
       i = Math.max(i + 1, lineEnd);
@@ -453,6 +1050,7 @@ export function extractSymbolsFromFile(
     }
   }
 
+  setBoundedCache(symbolExtractCache, cacheKey, symbols);
   return symbols;
 }
 
@@ -539,7 +1137,8 @@ function extractBlockBody(
 export function extractInvokedNames(body: string, selfName: string): string[] {
   const found = new Set<string>();
 
-  const callRegex = /(?:\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\()/g;
+  const callRegex =
+    /(?:\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(?:(?:::\s*)?<[^>;{}()]+>\s*)?\()/g;
   let match: RegExpExecArray | null;
 
   while ((match = callRegex.exec(body)) !== null) {
@@ -561,72 +1160,130 @@ export function extractInvokedNames(body: string, selfName: string): string[] {
     }
   }
 
+  // Rust / C++ struct literal or brace initialization: `StructName { ... }`
+  const structInitRegex = /\b([A-Z][a-zA-Z0-9_]*)\s*\{/g;
+  while ((match = structInitRegex.exec(body)) !== null) {
+    const structName = match[1];
+    if (
+      structName !== selfName &&
+      !isLanguageKeyword(structName) &&
+      isValidIdentifier(structName)
+    ) {
+      found.add(structName);
+    }
+  }
+
   return Array.from(found);
 }
 
+const LANGUAGE_KEYWORDS = new Set([
+  "if",
+  "else",
+  "for",
+  "while",
+  "do",
+  "switch",
+  "case",
+  "default",
+  "break",
+  "continue",
+  "return",
+  "try",
+  "catch",
+  "finally",
+  "throw",
+  "typeof",
+  "instanceof",
+  "new",
+  "delete",
+  "in",
+  "of",
+  "await",
+  "yield",
+  "import",
+  "export",
+  "from",
+  "as",
+  "class",
+  "function",
+  "const",
+  "let",
+  "var",
+  "super",
+  "this",
+  "require",
+  "describe",
+  "it",
+  "test",
+  "expect",
+  "console",
+  "Math",
+  "Object",
+  "Array",
+  "String",
+  "Number",
+  "Boolean",
+  "Promise",
+  "Map",
+  "Set",
+  "JSON",
+  "Error",
+  "setTimeout",
+  "clearTimeout",
+  "setInterval",
+  "clearInterval",
+  // Rust & C/C++ keywords / std macros
+  "fn",
+  "pub",
+  "mod",
+  "use",
+  "impl",
+  "trait",
+  "struct",
+  "enum",
+  "match",
+  "loop",
+  "move",
+  "mut",
+  "ref",
+  "Self",
+  "self",
+  "Some",
+  "None",
+  "Ok",
+  "Err",
+  "Box",
+  "Vec",
+  "Arc",
+  "Rc",
+  "Mutex",
+  "RwLock",
+  "Option",
+  "Result",
+  "sizeof",
+  "alignof",
+  "static_cast",
+  "dynamic_cast",
+  "reinterpret_cast",
+  "const_cast",
+  "printf",
+  "fprintf",
+  "snprintf",
+  "malloc",
+  "calloc",
+  "realloc",
+  "free",
+  "memcpy",
+  "memset",
+  "std",
+]);
+
 function isLanguageKeyword(word: string): boolean {
-  const keywords = new Set([
-    "if",
-    "else",
-    "for",
-    "while",
-    "do",
-    "switch",
-    "case",
-    "default",
-    "break",
-    "continue",
-    "return",
-    "try",
-    "catch",
-    "finally",
-    "throw",
-    "typeof",
-    "instanceof",
-    "new",
-    "delete",
-    "in",
-    "of",
-    "await",
-    "yield",
-    "import",
-    "export",
-    "from",
-    "as",
-    "class",
-    "function",
-    "const",
-    "let",
-    "var",
-    "super",
-    "this",
-    "require",
-    "describe",
-    "it",
-    "test",
-    "expect",
-    "console",
-    "Math",
-    "Object",
-    "Array",
-    "String",
-    "Number",
-    "Boolean",
-    "Promise",
-    "Map",
-    "Set",
-    "JSON",
-    "Error",
-    "setTimeout",
-    "clearTimeout",
-    "setInterval",
-    "clearInterval",
-  ]);
-  return keywords.has(word);
+  return LANGUAGE_KEYWORDS.has(word);
 }
 
 /* ------------------------------------------------------------------ */
-/* Type / interface / enum extraction (Fix 2a: signature contracts)    */
+/* Type / interface / enum / struct / trait extraction                 */
 /* ------------------------------------------------------------------ */
 
 const TYPE_BUILTINS = new Set([
@@ -665,6 +1322,17 @@ const TYPE_BUILTINS = new Set([
   "Event",
   "Buffer",
   "Intl",
+  "Vec",
+  "Option",
+  "Result",
+  "Box",
+  "Arc",
+  "Rc",
+  "HashMap",
+  "HashSet",
+  "BTreeMap",
+  "Mutex",
+  "RwLock",
 ]);
 
 function depthDelta(line: string): number {
@@ -681,23 +1349,52 @@ export function extractTypeDeclarations(
   filePath: string,
 ): TypeDeclaration[] {
   if (!content) return [];
+
+  const cacheKey = `${filePath}\0${fingerprintContent(content)}`;
+  const cached = typeExtractCache.get(cacheKey);
+  if (cached) return cached;
+
   const out: TypeDeclaration[] = [];
   const lines = content.split("\n");
-  const head =
-    /^(export\s+)?(?:declare\s+)?(interface|type|enum)\s+([A-Za-z_$][\w$]*)/;
+  const isRust = isRustFilePath(filePath);
+  const isCpp = isCppFilePath(filePath);
+
+  const head = isRust
+    ? /^(pub(?:\s*\([^)]+\))?\s+)?(?:unsafe\s+)?(struct|enum|trait|type)\s+([A-Za-z_]\w*)/
+    : isCpp
+      ? /^(?:template\s*<[^>]*>\s*)?()(struct|class|enum(?:\s+class)?|using)\s+([A-Za-z_]\w*)/
+      : /^(export\s+)?(?:declare\s+)?(interface|type|enum)\s+([A-Za-z_$][\w$]*)/;
 
   for (let i = 0; i < lines.length; i++) {
     const tr = lines[i].trim();
-    if (!tr || tr.startsWith("//") || tr.startsWith("*") || tr.startsWith("/*"))
+    if (
+      !tr ||
+      tr.startsWith("//") ||
+      tr.startsWith("*") ||
+      tr.startsWith("/*") ||
+      tr.startsWith("#")
+    )
       continue;
     const m = head.exec(tr);
     if (!m) continue;
-    const [, exp, kind, name] = m;
+    const [, exp, rawKind, name] = m;
+    const kind = (
+      rawKind.startsWith("enum")
+        ? "enum"
+        : rawKind === "using"
+          ? "type"
+          : rawKind
+    ) as TypeDeclaration["kind"];
+
+    // Skip forward declarations in C++ like `class Foo;`
+    if (isCpp && tr.endsWith(";") && !tr.includes("{") && rawKind !== "using") {
+      continue;
+    }
 
     let body = "";
     let lineEnd = i + 1;
-    if (kind === "type") {
-      // Capture until a top-level ";" (multi-line union/object types).
+    if (kind === "type" || (!tr.includes("{") && tr.endsWith(";"))) {
+      // Capture until a top-level ";" (multi-line union/object types or tuple structs).
       const buf = [lines[i]];
       let depth = depthDelta(lines[i]);
       let j = i;
@@ -723,20 +1420,21 @@ export function extractTypeDeclarations(
 
     out.push({
       name,
-      kind: kind as TypeDeclaration["kind"],
+      kind,
       filePath,
       lineStart: i + 1,
       lineEnd,
       body,
-      isExported: !!exp,
+      isExported: isCpp ? true : !!exp,
       references: [...refs],
     });
   }
+  setBoundedCache(typeExtractCache, cacheKey, out);
   return out;
 }
 
 /* ------------------------------------------------------------------ */
-/* Import / re-export / dynamic-import resolution                      */
+/* Import / re-export / #include / Rust `use` & `mod` resolution       */
 /* ------------------------------------------------------------------ */
 
 export function extractFileImports(
@@ -745,6 +1443,13 @@ export function extractFileImports(
   allFiles: ProcessedFile[],
 ): FileImport[] {
   if (!content) return [];
+
+  if (isRustFilePath(currentFilePath)) {
+    return extractRustFileImports(content, currentFilePath, allFiles);
+  }
+  if (isCppFilePath(currentFilePath)) {
+    return extractCppFileImports(content, currentFilePath, allFiles);
+  }
 
   const imports: FileImport[] = [];
   const importRegex =
@@ -844,6 +1549,196 @@ export function extractFileImports(
   return imports;
 }
 
+function extractRustFileImports(
+  content: string,
+  currentFilePath: string,
+  allFiles: ProcessedFile[],
+): FileImport[] {
+  const imports: FileImport[] = [];
+
+  // 1. `pub mod foo;` / `mod foo;` declarations
+  const modRegex = /^(?:\s*pub(?:\([^)]+\))?\s+|\s*)mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;/gm;
+  let m: RegExpExecArray | null;
+  while ((m = modRegex.exec(content)) !== null) {
+    const modName = m[1];
+    const resolvedFilePath = resolveRelativeImportPath(
+      `./${modName}`,
+      currentFilePath,
+      allFiles,
+    );
+    imports.push({
+      importedNames: [],
+      namespaceImport: modName,
+      sourcePath: `./${modName}`,
+      isRelative: true,
+      resolvedFilePath,
+      isWildcardInclude: true,
+    });
+  }
+
+  // 2. `use ...;` statements
+  const useRegex = /^(?:\s*pub(?:\([^)]+\))?\s+|\s*)use\s+([^;]+);/gm;
+  while ((m = useRegex.exec(content)) !== null) {
+    const rawUse = m[1].replace(/\s+/g, " ").trim();
+    const isInternal =
+      rawUse.startsWith("crate::") ||
+      rawUse.startsWith("super::") ||
+      rawUse.startsWith("self::");
+
+    // Extract brace group if present: `crate::storage::wal::{WalWriter, WalRecord}`
+    const braceIdx = rawUse.indexOf("{");
+    let pathPrefix = rawUse;
+    const importedNames: { name: string; alias?: string }[] = [];
+    let isWildcard = false;
+
+    if (braceIdx !== -1) {
+      pathPrefix = rawUse.slice(0, braceIdx).replace(/::\s*$/, "");
+      const inside = rawUse.slice(braceIdx + 1, rawUse.lastIndexOf("}"));
+      for (const item of inside.split(",")) {
+        const cl = item.trim();
+        if (!cl || cl === "self") continue;
+        if (cl === "*") {
+          isWildcard = true;
+          continue;
+        }
+        if (cl.includes(" as ")) {
+          const [orig, alias] = cl.split(/\s+as\s+/);
+          importedNames.push({ name: orig.trim(), alias: alias.trim() });
+        } else {
+          const lastSeg = cl.split("::").pop()!.trim();
+          importedNames.push({ name: lastSeg });
+        }
+      }
+    } else if (rawUse.endsWith("::*")) {
+      pathPrefix = rawUse.slice(0, -3);
+      isWildcard = true;
+    } else {
+      const segs = rawUse.split("::");
+      const last = segs.pop()!.trim();
+      pathPrefix = segs.join("::");
+      if (last.includes(" as ")) {
+        const [orig, alias] = last.split(/\s+as\s+/);
+        importedNames.push({ name: orig.trim(), alias: alias.trim() });
+      } else {
+        importedNames.push({ name: last });
+      }
+    }
+
+    if (isInternal) {
+      const relSource = convertRustModulePathToRelative(
+        pathPrefix,
+        currentFilePath,
+      );
+      let resolvedFilePath = resolveRelativeImportPath(
+        relSource,
+        currentFilePath,
+        allFiles,
+      );
+      // If `use crate::module::func_name` had `func_name` as the last segment,
+      // `pathPrefix` is `crate::module` which resolves directly to `module.rs`!
+      // If `use crate::module` imported the module itself, try including the last item too.
+      if (!resolvedFilePath && importedNames.length === 1) {
+        const altSource = convertRustModulePathToRelative(
+          `${pathPrefix}::${importedNames[0].name}`,
+          currentFilePath,
+        );
+        resolvedFilePath = resolveRelativeImportPath(
+          altSource,
+          currentFilePath,
+          allFiles,
+        );
+      }
+
+      imports.push({
+        importedNames,
+        sourcePath: rawUse,
+        isRelative: true,
+        resolvedFilePath,
+        isWildcardInclude: isWildcard,
+      });
+    } else {
+      const crateName = rawUse.split("::")[0].trim();
+      imports.push({
+        importedNames,
+        sourcePath: crateName,
+        isRelative: false,
+      });
+    }
+  }
+
+  return imports;
+}
+
+function convertRustModulePathToRelative(
+  rustPath: string,
+  currentFilePath: string,
+): string {
+  if (rustPath.startsWith("crate::") || rustPath === "crate") {
+    const rest = rustPath.slice(5).replace(/^::/, "").replace(/::/g, "/");
+    // Find the crate `src/` directory in `currentFilePath`
+    const srcIdx = currentFilePath.indexOf("/src/");
+    if (srcIdx !== -1) {
+      return `${currentFilePath.slice(0, srcIdx + 4)}/${rest || "lib"}`;
+    }
+    return `./${rest || "lib"}`;
+  }
+  if (rustPath.startsWith("self::") || rustPath === "self") {
+    const rest = rustPath.slice(4).replace(/^::/, "").replace(/::/g, "/");
+    return `./${rest}`;
+  }
+  if (rustPath.startsWith("super::") || rustPath === "super") {
+    let cur = rustPath;
+    const ups: string[] = [];
+    while (cur.startsWith("super")) {
+      ups.push("..");
+      cur = cur.slice(5).replace(/^::/, "");
+    }
+    const rest = cur.replace(/::/g, "/");
+    return `${ups.join("/")}${rest ? `/${rest}` : ""}`;
+  }
+  return `./${rustPath.replace(/::/g, "/")}`;
+}
+
+function extractCppFileImports(
+  content: string,
+  currentFilePath: string,
+  allFiles: ProcessedFile[],
+): FileImport[] {
+  const imports: FileImport[] = [];
+  const includeRegex = /^\s*#\s*include\s*([<"])([^>"]+)[>"]/gm;
+  let m: RegExpExecArray | null;
+  while ((m = includeRegex.exec(content)) !== null) {
+    const bracket = m[1];
+    const headerPath = m[2].trim();
+    const isSystem = bracket === "<";
+
+    // Even `<...>` includes can sometimes point to project headers in `include/`
+    const resolvedLocal = resolveRelativeImportPath(
+      headerPath.startsWith(".") ? headerPath : `./${headerPath}`,
+      currentFilePath,
+      allFiles,
+    );
+
+    if (!isSystem || resolvedLocal) {
+      imports.push({
+        importedNames: [],
+        sourcePath: headerPath,
+        isRelative: true,
+        resolvedFilePath: resolvedLocal,
+        isWildcardInclude: true,
+      });
+    } else {
+      imports.push({
+        importedNames: [],
+        sourcePath: `<${headerPath}>`,
+        isRelative: false,
+        isWildcardInclude: true,
+      });
+    }
+  }
+  return imports;
+}
+
 /** `export default Identifier;` — links a local symbol to the default slot. */
 export function extractFileDefaultRef(content: string): string | undefined {
   const m =
@@ -861,6 +1756,10 @@ export interface LazyBinding {
 /** `const Dashboard = lazy(() => import("./pages/Dashboard"))` bindings. */
 export function extractLazyBindings(content: string): LazyBinding[] {
   if (!content) return [];
+  const cacheKey = fingerprintContent(content);
+  const cached = lazyExtractCache.get(cacheKey);
+  if (cached) return cached;
+
   const out: LazyBinding[] = [];
   const re =
     /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:React\.)?lazy\s*\(\s*(?:async\s*)?\(\s*\)\s*=>\s*import\s*\(\s*['"]([^'"]+)['"]\s*\)/gm;
@@ -868,7 +1767,56 @@ export function extractLazyBindings(content: string): LazyBinding[] {
   while ((m = re.exec(content)) !== null) {
     out.push({ name: m[1], sourcePath: m[2] });
   }
+  setBoundedCache(lazyExtractCache, cacheKey, out);
   return out;
+}
+
+/**
+ * O(1) lookup index for relative import resolution across a ProcessedFile[] array.
+ * Eliminates the O(N) linear scan per candidate per import that caused O(N²) stalls
+ * on large codebases.
+ */
+interface FilePathLookupIndex {
+  /** Exact relativePath -> relativePath */
+  exact: Map<string, string>;
+  /** Suffix after a "/" -> first matching relativePath (handles f.relativePath.endsWith(`/${candidate}`)) */
+  bySlashSuffix: Map<string, string>;
+  /** All relativePaths in original order for rare non-slash suffix matches */
+  allPaths: string[];
+}
+
+const fileLookupIndexCache = new WeakMap<
+  ProcessedFile[],
+  FilePathLookupIndex
+>();
+
+function getFileLookupIndex(allFiles: ProcessedFile[]): FilePathLookupIndex {
+  let index = fileLookupIndexCache.get(allFiles);
+  if (index) return index;
+
+  const exact = new Map<string, string>();
+  const bySlashSuffix = new Map<string, string>();
+  const allPaths: string[] = [];
+
+  for (let i = 0; i < allFiles.length; i++) {
+    const rel = allFiles[i].relativePath;
+    allPaths.push(rel);
+    if (!exact.has(rel)) {
+      exact.set(rel, rel);
+    }
+    let slashIdx = rel.indexOf("/");
+    while (slashIdx !== -1) {
+      const suffix = rel.slice(slashIdx + 1);
+      if (suffix && !bySlashSuffix.has(suffix)) {
+        bySlashSuffix.set(suffix, rel);
+      }
+      slashIdx = rel.indexOf("/", slashIdx + 1);
+    }
+  }
+
+  index = { exact, bySlashSuffix, allPaths };
+  fileLookupIndexCache.set(allFiles, index);
+  return index;
 }
 
 export function resolveRelativeImportPath(
@@ -876,40 +1824,79 @@ export function resolveRelativeImportPath(
   currentFilePath: string,
   allFiles: ProcessedFile[],
 ): string | undefined {
-  const currentSegments = currentFilePath.split("/");
-  currentSegments.pop();
+  if (allFiles.length === 0) return undefined;
 
-  const sourceSegments = importSource.split("/");
-  for (const seg of sourceSegments) {
-    if (seg === ".") continue;
-    else if (seg === "..") {
-      if (currentSegments.length > 0) currentSegments.pop();
-    } else {
-      currentSegments.push(seg);
+  let targetBasePath = "";
+  if (
+    !importSource.startsWith(".") &&
+    !importSource.startsWith("/") &&
+    importSource.includes("/")
+  ) {
+    targetBasePath = importSource;
+  } else {
+    const currentSegments = currentFilePath.split("/");
+    currentSegments.pop();
+
+    const sourceSegments = importSource.split("/");
+    for (const seg of sourceSegments) {
+      if (!seg || seg === ".") continue;
+      else if (seg === "..") {
+        if (currentSegments.length > 0) currentSegments.pop();
+      } else {
+        currentSegments.push(seg);
+      }
     }
+    targetBasePath = currentSegments.join("/");
   }
 
-  const targetBasePath = currentSegments.join("/");
+  const rawClean = importSource.replace(/^\.\//, "");
   const candidates = [
     targetBasePath,
     `${targetBasePath}.ts`,
     `${targetBasePath}.tsx`,
     `${targetBasePath}.js`,
     `${targetBasePath}.jsx`,
+    `${targetBasePath}.rs`,
+    `${targetBasePath}/mod.rs`,
+    `${targetBasePath}.h`,
+    `${targetBasePath}.hpp`,
+    `${targetBasePath}.hh`,
+    `${targetBasePath}.hxx`,
+    `${targetBasePath}.cpp`,
+    `${targetBasePath}.cc`,
+    `${targetBasePath}.c`,
     `${targetBasePath}/index.ts`,
     `${targetBasePath}/index.tsx`,
     `${targetBasePath}/index.js`,
     `${targetBasePath}/index.jsx`,
+    rawClean,
+    `src/${rawClean}`,
+    `include/${rawClean}`,
+    `${rawClean}.rs`,
+    `src/${rawClean}.rs`,
+    `src/${rawClean}/mod.rs`,
   ];
 
+  const index = getFileLookupIndex(allFiles);
+
   for (const candidate of candidates) {
-    const found = allFiles.find(
-      (f) =>
-        f.relativePath === candidate ||
-        f.relativePath.endsWith(`/${candidate}`) ||
-        candidate.endsWith(f.relativePath),
-    );
-    if (found) return found.relativePath;
+    if (!candidate) continue;
+    // 1. f.relativePath === candidate
+    const exactMatch = index.exact.get(candidate);
+    if (exactMatch !== undefined) return exactMatch;
+
+    // 2. f.relativePath.endsWith(`/${candidate}`)
+    const suffixMatch = index.bySlashSuffix.get(candidate);
+    if (suffixMatch !== undefined) return suffixMatch;
+
+    // 3. candidate.endsWith(f.relativePath) — check slash-delimited suffixes of candidate in O(segments)
+    let slashIdx = candidate.indexOf("/");
+    while (slashIdx !== -1) {
+      const sub = candidate.slice(slashIdx + 1);
+      const subMatch = index.exact.get(sub);
+      if (subMatch !== undefined) return subMatch;
+      slashIdx = candidate.indexOf("/", slashIdx + 1);
+    }
   }
   return undefined;
 }
@@ -930,6 +1917,10 @@ export function validateFileSyntax(
   fileName: string,
 ): SyntaxDiagnostic[] {
   if (!content) return [];
+  const cacheKey = `${filePath}\0${fileName}\0${fingerprintContent(content)}`;
+  const cached = syntaxDiagnosticCache.get(cacheKey);
+  if (cached) return cached;
+
   const diagnostics: SyntaxDiagnostic[] = [];
   const lines = content.split("\n");
 
@@ -969,6 +1960,7 @@ export function validateFileSyntax(
         category: "json-syntax",
       });
     }
+    setBoundedCache(syntaxDiagnosticCache, cacheKey, diagnostics);
     return diagnostics;
   }
 
@@ -1015,6 +2007,18 @@ export function validateFileSyntax(
       }
 
       if (!inDoubleQuote && !inTemplate && ch === "'") {
+        if (
+          !inSingleQuote &&
+          (isRustFilePath(filePath) || isCppFilePath(filePath))
+        ) {
+          // In Rust (`&'a str`, `'static`) and C++14 (`1'000'000`), single quotes
+          // are lifetimes or digit separators unless closed within a few chars (`'x'`, `'\n'`).
+          const restOfLine = lineText.slice(c + 1, c + 8);
+          if (!/^(\\.|[^'\\])'/.test(restOfLine)) {
+            c++;
+            continue;
+          }
+        }
         inSingleQuote = !inSingleQuote;
         c++;
         continue;
@@ -1026,7 +2030,13 @@ export function validateFileSyntax(
         continue;
       }
 
-      if (!inSingleQuote && !inDoubleQuote && ch === "`") {
+      if (
+        !inSingleQuote &&
+        !inDoubleQuote &&
+        ch === "`" &&
+        !isRustFilePath(filePath) &&
+        !isCppFilePath(filePath)
+      ) {
         if (inTemplate) {
           inTemplate = false;
         } else {
@@ -1167,6 +2177,7 @@ export function validateFileSyntax(
     });
   }
 
+  setBoundedCache(syntaxDiagnosticCache, cacheKey, diagnostics);
   return diagnostics;
 }
 
@@ -1209,16 +2220,29 @@ export function buildCodebaseDependencyGraph(
   const codeFiles = files.filter(isCodeFile);
   const allSymbols: DepLenzSymbol[] = [];
   const fileSymbolsMap = new Map<string, DepLenzSymbol[]>();
+  const fileSymbolByNameMap = new Map<string, Map<string, DepLenzSymbol>>();
   const fileImportsMap = new Map<string, FileImport[]>();
+  const fileImportBindingMap = new Map<
+    string,
+    Map<
+      string,
+      { imp: FileImport; isDefaultBinding: boolean; importedName: string }
+    >
+  >();
   const fileLazyMap = new Map<string, LazyBinding[]>();
+  const fileLazyByNameMap = new Map<string, Map<string, LazyBinding>>();
   const fileTypesMap = new Map<string, TypeDeclaration[]>();
   const typeIndex = new Map<string, TypeDeclaration[]>();
   const allDiagnostics: SyntaxDiagnostic[] = [];
   const filesWithSyntaxErrorsSet = new Set<string>();
 
-  // 1. Syntax validation across all web files
+  // 1. Syntax validation across all code/web files (excluding TOML)
   for (const file of files) {
-    if (isWebDevFile(file) && file.textContent) {
+    if (
+      isWebDevFile(file) &&
+      file.textContent &&
+      file.extension.toLowerCase() !== "toml"
+    ) {
       const diags = validateFileSyntax(
         file.textContent,
         file.relativePath,
@@ -1234,15 +2258,66 @@ export function buildCodebaseDependencyGraph(
   // 2. Extract symbols, imports, lazy bindings and type declarations
   for (const file of codeFiles) {
     const text = file.textContent || "";
-    const symbols = extractSymbolsFromFile(text, file.relativePath, file.name);
+    const rawSymbols = extractSymbolsFromFile(text, file.relativePath, file.name);
+    const dedupedById = new Map<string, DepLenzSymbol>();
+    for (const sym of rawSymbols) {
+      const existing = dedupedById.get(sym.id);
+      if (existing) {
+        const mergedCalls = new Set([...existing.calls, ...sym.calls]);
+        dedupedById.set(sym.id, { ...existing, calls: [...mergedCalls] });
+      } else {
+        dedupedById.set(sym.id, sym);
+      }
+    }
+    const symbols = [...dedupedById.values()];
     const imports = extractFileImports(text, file.relativePath, files);
     const lazy = extractLazyBindings(text);
     const types = extractTypeDeclarations(text, file.relativePath);
 
     allSymbols.push(...symbols);
     fileSymbolsMap.set(file.relativePath, symbols);
+
+    const byName = new Map<string, DepLenzSymbol>();
+    for (const s of symbols) {
+      if (!byName.has(s.name)) byName.set(s.name, s);
+    }
+    fileSymbolByNameMap.set(file.relativePath, byName);
+
     fileImportsMap.set(file.relativePath, imports);
+    const bindingMap = new Map<
+      string,
+      { imp: FileImport; isDefaultBinding: boolean; importedName: string }
+    >();
+    for (const imp of imports) {
+      if (imp.defaultImport && !bindingMap.has(imp.defaultImport)) {
+        bindingMap.set(imp.defaultImport, {
+          imp,
+          isDefaultBinding: true,
+          importedName: imp.defaultImport,
+        });
+      }
+      for (const n of imp.importedNames) {
+        const localName = n.alias ?? n.name;
+        if (!bindingMap.has(localName)) {
+          bindingMap.set(localName, {
+            imp,
+            isDefaultBinding: false,
+            importedName: n.name,
+          });
+        }
+      }
+    }
+    fileImportBindingMap.set(file.relativePath, bindingMap);
+
     fileLazyMap.set(file.relativePath, lazy);
+    if (lazy.length > 0) {
+      const lMap = new Map<string, LazyBinding>();
+      for (const l of lazy) {
+        if (!lMap.has(l.name)) lMap.set(l.name, l);
+      }
+      fileLazyByNameMap.set(file.relativePath, lMap);
+    }
+
     fileTypesMap.set(file.relativePath, types);
     for (const t of types) {
       const arr = typeIndex.get(t.name) || [];
@@ -1276,31 +2351,57 @@ export function buildCodebaseDependencyGraph(
   for (const sym of allSymbols) {
     if (!sym.isExported) continue;
     const t = tableFor(sym.filePath);
-    t.set(sym.name, sym.id);
+    // Prefer concrete implementation in .cpp/.cc/.c over header prototype when both exist
+    const existingId = t.get(sym.name);
+    if (!existingId) {
+      t.set(sym.name, sym.id);
+    }
     if (sym.isDefaultExport) t.set("default", sym.id);
   }
   // `export default Identifier;` references.
   for (const file of codeFiles) {
     const ref = extractFileDefaultRef(file.textContent || "");
     if (!ref) continue;
-    const sym = (fileSymbolsMap.get(file.relativePath) || []).find(
-      (s) => s.name === ref,
-    );
+    const sym = fileSymbolByNameMap.get(file.relativePath)?.get(ref);
     if (sym) tableFor(file.relativePath).set("default", sym.id);
   }
-  // Passes 2..4: re-export fixed-point (barrels propagate their sources'
-  // exports until nothing new appears — handles nested chains like
-  // components/index.ts -> ./Button -> Button.tsx). Cycle-safe: each pass
-  // only ADDS entries, and a pass with no additions terminates the loop.
+
+  // Pass 1b (C/C++ header <-> implementation bridge):
+  // When `world.cpp` `#include "world.hpp"`, register `world.cpp`'s exported symbols
+  // on `world.hpp`'s export table (overwriting header-only prototypes with the real
+  // `.cpp` implementation!) so callers that `#include "world.hpp"` link directly to `world.cpp`.
+  for (const [fp, imports] of fileImportsMap) {
+    if (!isCppFilePath(fp)) continue;
+    const isImplFile =
+      fp.endsWith(".cpp") ||
+      fp.endsWith(".cc") ||
+      fp.endsWith(".cxx") ||
+      fp.endsWith(".c");
+    if (!isImplFile) continue;
+    const implSyms = fileSymbolsMap.get(fp) || [];
+    for (const imp of imports) {
+      if (!imp.isWildcardInclude || !imp.resolvedFilePath) continue;
+      const headerTable = tableFor(imp.resolvedFilePath);
+      for (const s of implSyms) {
+        if (s.isExported) {
+          headerTable.set(s.name, s.id);
+        }
+      }
+    }
+  }
+
+  // Passes 2..4: re-export fixed-point (barrels and wildcard includes propagate
+  // their sources' exports until nothing new appears).
   for (let pass = 0; pass < 4; pass++) {
     let changed = false;
     for (const [fp, imports] of fileImportsMap) {
       for (const imp of imports) {
-        if (!imp.isReExport || !imp.resolvedFilePath) continue;
+        if ((!imp.isReExport && !imp.isWildcardInclude) || !imp.resolvedFilePath)
+          continue;
         const src = exportTable.get(imp.resolvedFilePath);
         if (!src) continue;
         const t = tableFor(fp);
-        if (imp.starReExport) {
+        if (imp.starReExport || imp.isWildcardInclude) {
           for (const [name, id] of src) {
             if (name !== "default" && !t.has(name)) {
               t.set(name, id);
@@ -1324,6 +2425,10 @@ export function buildCodebaseDependencyGraph(
 
   /* ---- Graph nodes ---------------------------------------------------- */
   const nodesMap = new Map<string, DepLenzGraphNode>();
+  const nodeDepIds = new Map<string, Set<string>>();
+  const nodeDependentIds = new Map<string, Set<string>>();
+  const nodeExtDeps = new Map<string, Set<string>>();
+
   for (const sym of allSymbols) {
     nodesMap.set(sym.id, {
       symbol: sym,
@@ -1336,6 +2441,9 @@ export function buildCodebaseDependencyGraph(
       directCallees: 0,
       blastRadius: 0,
     });
+    nodeDepIds.set(sym.id, new Set());
+    nodeDependentIds.set(sym.id, new Set());
+    nodeExtDeps.set(sym.id, new Set());
   }
 
   /* ---- Call resolution ------------------------------------------------ */
@@ -1343,49 +2451,61 @@ export function buildCodebaseDependencyGraph(
 
   for (const sym of allSymbols) {
     const currentNode = nodesMap.get(sym.id)!;
+    const currentDepSet = nodeDepIds.get(sym.id)!;
+    const currentExtSet = nodeExtDeps.get(sym.id)!;
     const fileImports = fileImportsMap.get(sym.filePath) || [];
-    const lazyBindings = fileLazyMap.get(sym.filePath) || [];
-    const sameFileSymbols = fileSymbolsMap.get(sym.filePath) || [];
+    const importBindings = fileImportBindingMap.get(sym.filePath);
+    const lazyByName = fileLazyByNameMap.get(sym.filePath);
+    const sameFileByName = fileSymbolByNameMap.get(sym.filePath);
 
     const registerEdge = (
       target: DepLenzSymbol,
       viaImport: string | undefined,
     ) => {
       if (target.id === sym.id) return;
-      if (!currentNode.dependencies.some((d) => d.symbol.id === target.id)) {
+      if (!currentDepSet.has(target.id)) {
+        currentDepSet.add(target.id);
         currentNode.dependencies.push({ symbol: target, viaImport });
         totalDependenciesMapped++;
       }
       const targetNode = nodesMap.get(target.id);
-      if (
-        targetNode &&
-        !targetNode.dependents.some((d) => d.symbol.id === sym.id)
-      ) {
+      const targetDependentSet = nodeDependentIds.get(target.id);
+      if (targetNode && targetDependentSet && !targetDependentSet.has(sym.id)) {
+        targetDependentSet.add(sym.id);
         targetNode.dependents.push({ symbol: sym, viaImport });
       }
     };
 
     const registerExternal = (pkg: string) => {
-      if (!currentNode.externalDependencies.includes(pkg)) {
+      if (!currentExtSet.has(pkg)) {
+        currentExtSet.add(pkg);
         currentNode.externalDependencies.push(pkg);
       }
     };
 
-    // Namespace member accesses: `utils.foo()` via `import * as utils`.
-    // The bare call extractor sees `foo(` but cannot attribute it — the
-    // namespace alias tells us exactly which file `foo` comes from (1a).
+    // For C/C++ system `<header>` includes or Rust external crates with wildcard/module usage
+    for (const imp of fileImports) {
+      if (!imp.isRelative && imp.isWildcardInclude) {
+        registerExternal(imp.sourcePath);
+      }
+    }
+
+    // Namespace member accesses: `utils.foo()` via `import * as utils` or `mod::foo()` in Rust.
     const calledNames = new Set(sym.calls);
     for (const imp of fileImports) {
       if (!imp.namespaceImport) continue;
+      if (!sym.body.includes(imp.namespaceImport)) continue;
       if (!imp.isRelative && !imp.isTypeOnly) {
-        if (new RegExp(`\\b${imp.namespaceImport}\\.`).test(sym.body)) {
+        if (
+          new RegExp(`\\b${imp.namespaceImport}(?:\\.|::)`).test(sym.body)
+        ) {
           registerExternal(imp.sourcePath);
         }
         continue;
       }
       if (!imp.resolvedFilePath) continue;
       const nsRe = new RegExp(
-        `\\b${imp.namespaceImport}\\.([A-Za-z_$][A-Za-z0-9_$]*)`,
+        `\\b${imp.namespaceImport}(?:\\.|::)([A-Za-z_$][A-Za-z0-9_$]*)`,
         "g",
       );
       let nm: RegExpExecArray | null;
@@ -1398,44 +2518,57 @@ export function buildCodebaseDependencyGraph(
       let resolved: DepLenzSymbol | undefined;
       let viaImport: string | undefined;
 
-      // 1. Explicit imports — named, aliased, default — resolved through
-      //    the target file's EXPORT TABLE, so default exports whose local
-      //    name differs (`import Dash from "./Dashboard"`), named imports
-      //    of default exports, and barrel re-exports all land (1a).
-      for (const imp of fileImports) {
-        const isDefaultBinding = imp.defaultImport === calledName;
-        const named = imp.importedNames.find(
-          (n) => (n.alias ?? n.name) === calledName,
-        );
-        if (!isDefaultBinding && !named) continue;
-
+      // 1. Explicit imports — named, aliased, default — resolved in O(1)
+      //    through the file's binding map and the target file's EXPORT TABLE.
+      const bound = importBindings?.get(calledName);
+      if (bound) {
+        const { imp, isDefaultBinding, importedName } = bound;
         viaImport = imp.sourcePath;
         if (!imp.isRelative) {
           if (!imp.isTypeOnly) registerExternal(imp.sourcePath);
-          break;
-        }
-        if (imp.resolvedFilePath) {
+        } else if (imp.resolvedFilePath) {
           const table = exportTable.get(imp.resolvedFilePath);
           const id = isDefaultBinding
             ? (table?.get("default") ?? table?.get(calledName))
-            : table?.get(named!.name);
+            : table?.get(importedName);
           if (id) resolved = symbolById.get(id);
           if (!resolved) {
-            // Export table missed (unexported local) — direct match in the
-            // resolved file is still better than no edge.
-            const foreign = fileSymbolsMap.get(imp.resolvedFilePath) || [];
-            resolved = foreign.find(
-              (s) => s.name === (isDefaultBinding ? calledName : named!.name),
+            const foreignByName = fileSymbolByNameMap.get(imp.resolvedFilePath);
+            resolved = foreignByName?.get(
+              isDefaultBinding ? calledName : importedName,
             );
           }
         }
-        break;
+      }
+
+      // 1b. Wildcard includes (`#include "header.h"`, `mod sub;`, `use crate::mod::*`)
+      if (!resolved) {
+        for (const imp of fileImports) {
+          if (!imp.isWildcardInclude || !imp.resolvedFilePath) continue;
+          const table = exportTable.get(imp.resolvedFilePath);
+          const id = table?.get(calledName);
+          if (id) {
+            const candidate = symbolById.get(id);
+            if (candidate && candidate.id !== sym.id) {
+              resolved = candidate;
+              viaImport = imp.sourcePath;
+              break;
+            }
+          }
+          const foreign = fileSymbolByNameMap
+            .get(imp.resolvedFilePath)
+            ?.get(calledName);
+          if (foreign && foreign.id !== sym.id) {
+            resolved = foreign;
+            viaImport = imp.sourcePath;
+            break;
+          }
+        }
       }
 
       // 2. React.lazy bindings declared in this file (1a):
-      //    `const Dashboard = lazy(() => import("./pages/Dashboard"))`
-      if (!resolved) {
-        const lazy = lazyBindings.find((l) => l.name === calledName);
+      if (!resolved && lazyByName) {
+        const lazy = lazyByName.get(calledName);
         if (lazy) {
           const targetPath = resolveRelativeImportPath(
             lazy.sourcePath,
@@ -1450,28 +2583,37 @@ export function buildCodebaseDependencyGraph(
               const foreign = fileSymbolsMap.get(targetPath) || [];
               resolved =
                 foreign.find((s) => s.isDefaultExport) ??
-                foreign.find((s) => s.name === calledName);
+                fileSymbolByNameMap.get(targetPath)?.get(calledName);
             }
             if (resolved) viaImport = lazy.sourcePath;
           }
         }
       }
 
-      // 3. Same-file symbols (local helpers)
-      if (!resolved) {
-        resolved = sameFileSymbols.find(
-          (s) => s.name === calledName && s.id !== sym.id,
-        );
+      // 3. Same-file symbols (local helpers) — O(1) lookup
+      if (!resolved && sameFileByName) {
+        const local = sameFileByName.get(calledName);
+        if (local && local.id !== sym.id) {
+          resolved = local;
+        }
       }
 
-      // 4. Global fallback: unique name across the whole project
+      // 4. Global fallback: unique name across the whole project (or prefer non-header implementation in C++)
       if (!resolved) {
-        const globalCandidates = symbolByName.get(calledName) || [];
-        if (
-          globalCandidates.length === 1 &&
-          globalCandidates[0].id !== sym.id
-        ) {
-          resolved = globalCandidates[0];
+        const globalCandidates = symbolByName.get(calledName);
+        if (globalCandidates && globalCandidates.length > 0) {
+          const nonSelf = globalCandidates.filter((c) => c.id !== sym.id);
+          if (nonSelf.length === 1) {
+            resolved = nonSelf[0];
+          } else if (nonSelf.length > 1 && sym.language === "cpp") {
+            const implCandidate = nonSelf.find(
+              (c) =>
+                c.filePath.endsWith(".cpp") ||
+                c.filePath.endsWith(".cc") ||
+                c.filePath.endsWith(".c"),
+            );
+            if (implCandidate) resolved = implCandidate;
+          }
         }
       }
 
@@ -1482,10 +2624,24 @@ export function buildCodebaseDependencyGraph(
   /* ---- Impact metrics (1b): callers dominate the risk rating ---------- */
   let totalComponents = 0;
   let totalHooks = 0;
+  let totalStructs = 0;
+  let totalTraits = 0;
+  let totalClasses = 0;
 
   for (const [, node] of nodesMap) {
-    if (node.symbol.kind === "component") totalComponents++;
-    if (node.symbol.kind === "hook") totalHooks++;
+    if (
+      node.symbol.kind === "component" ||
+      node.symbol.kind === "struct" ||
+      node.symbol.kind === "class"
+    ) {
+      totalComponents++;
+    }
+    if (node.symbol.kind === "hook" || node.symbol.kind === "trait") {
+      totalHooks++;
+    }
+    if (node.symbol.kind === "struct") totalStructs++;
+    if (node.symbol.kind === "trait") totalTraits++;
+    if (node.symbol.kind === "class") totalClasses++;
 
     node.directCallers = node.dependents.length;
     node.directCallees = node.dependencies.length;
@@ -1498,6 +2654,105 @@ export function buildCodebaseDependencyGraph(
     node.impactLevel = risk >= 10 ? "high" : risk >= 4 ? "medium" : "low";
   }
 
+  /* ---- Subsystem / Module Communication Clusters ---------------------- */
+  const clusterMap = new Map<
+    string,
+    {
+      files: Set<string>;
+      symbolIds: string[];
+      langs: Map<string, number>;
+      inboundCalls: number;
+      outboundCalls: number;
+    }
+  >();
+
+  for (const sym of allSymbols) {
+    const modName = sym.moduleName || inferModuleNameFromPath(sym.filePath);
+    let cl = clusterMap.get(modName);
+    if (!cl) {
+      cl = {
+        files: new Set(),
+        symbolIds: [],
+        langs: new Map(),
+        inboundCalls: 0,
+        outboundCalls: 0,
+      };
+      clusterMap.set(modName, cl);
+    }
+    cl.files.add(sym.filePath);
+    cl.symbolIds.push(sym.id);
+    const l = sym.language || "ts";
+    cl.langs.set(l, (cl.langs.get(l) ?? 0) + 1);
+  }
+
+  const modEdgeMap = new Map<
+    string,
+    { sourceModule: string; targetModule: string; callCount: number; examples: string[] }
+  >();
+
+  for (const [, node] of nodesMap) {
+    const srcMod =
+      node.symbol.moduleName || inferModuleNameFromPath(node.symbol.filePath);
+    for (const dep of node.dependencies) {
+      const tgtMod =
+        dep.symbol.moduleName || inferModuleNameFromPath(dep.symbol.filePath);
+      if (srcMod === tgtMod) continue;
+
+      const srcCluster = clusterMap.get(srcMod);
+      const tgtCluster = clusterMap.get(tgtMod);
+      if (srcCluster) srcCluster.outboundCalls++;
+      if (tgtCluster) tgtCluster.inboundCalls++;
+
+      const edgeKey = `${srcMod}->${tgtMod}`;
+      let edge = modEdgeMap.get(edgeKey);
+      if (!edge) {
+        edge = {
+          sourceModule: srcMod,
+          targetModule: tgtMod,
+          callCount: 0,
+          examples: [],
+        };
+        modEdgeMap.set(edgeKey, edge);
+      }
+      edge.callCount++;
+      if (edge.examples.length < 3) {
+        edge.examples.push(`${node.symbol.name} → ${dep.symbol.name}`);
+      }
+    }
+  }
+
+  const moduleClusters: ModuleCluster[] = Array.from(clusterMap.entries())
+    .map(([name, data]) => {
+      let topLang = "ts";
+      let maxCount = 0;
+      for (const [l, cnt] of data.langs) {
+        if (cnt > maxCount) {
+          topLang = l;
+          maxCount = cnt;
+        }
+      }
+      return {
+        id: `mod:${name}`,
+        name,
+        role: inferFolderRole(name) ?? "core module",
+        language: topLang,
+        fileCount: data.files.size,
+        symbolIds: data.symbolIds,
+        inboundCalls: data.inboundCalls,
+        outboundCalls: data.outboundCalls,
+      };
+    })
+    .sort((a, b) => b.symbolIds.length - a.symbolIds.length);
+
+  const moduleEdges: ModuleCommunicationEdge[] = Array.from(
+    modEdgeMap.entries(),
+  )
+    .map(([id, e]) => ({
+      id,
+      ...e,
+    }))
+    .sort((a, b) => b.callCount - a.callCount);
+
   return {
     symbols: allSymbols,
     nodesMap,
@@ -1507,11 +2762,17 @@ export function buildCodebaseDependencyGraph(
     totalFunctions: allSymbols.length,
     totalComponents,
     totalHooks,
+    totalStructs,
+    totalTraits,
+    totalClasses,
     totalDependenciesMapped,
     analyzedFilesCount: codeFiles.length,
     diagnostics: allDiagnostics,
     totalSyntaxWarnings: allDiagnostics.length,
     filesWithSyntaxErrors: Array.from(filesWithSyntaxErrorsSet),
+    projectStack: detectCodebaseStack(files),
+    moduleClusters,
+    moduleEdges,
   };
 }
 
@@ -1549,9 +2810,14 @@ export function searchCodebase(
     searchRegex = new RegExp(escaped, "gi");
   }
 
+  const filterLower = options.fileFilter
+    ? options.fileFilter.toLowerCase()
+    : "";
+  const canFastSubstringPrecheck =
+    !options.isRegex && !options.wholeWord && Boolean(options.caseSensitive);
+
   for (const file of searchFiles) {
-    if (options.fileFilter) {
-      const filterLower = options.fileFilter.toLowerCase();
+    if (filterLower) {
       if (
         !file.relativePath.toLowerCase().includes(filterLower) &&
         !file.name.toLowerCase().includes(filterLower)
@@ -1561,11 +2827,22 @@ export function searchCodebase(
     }
 
     const content = file.textContent || "";
+    if (!content) continue;
+
+    // Fast whole-file precheck: skip splitting into lines if the file doesn't match at all.
+    if (canFastSubstringPrecheck) {
+      if (!content.includes(query)) continue;
+    } else {
+      searchRegex.lastIndex = 0;
+      if (!searchRegex.test(content)) continue;
+    }
+
     const lines = content.split("\n");
     const fileSymbols = symbolsMap?.get(file.relativePath) || [];
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       const lineText = lines[lineIdx];
+      if (canFastSubstringPrecheck && !lineText.includes(query)) continue;
       searchRegex.lastIndex = 0;
 
       let match: RegExpExecArray | null;
@@ -1620,6 +2897,13 @@ const FOLDER_ROLE_HINTS: { match: RegExp; role: string }[] = [
   { match: /(^|\/)(routes?|router)(\/|$)/i, role: "routing" },
   { match: /(^|\/)(scripts?|tools?)(\/|$)/i, role: "build / utility scripts" },
   { match: /(^|\/)(docs?|documentation)(\/|$)/i, role: "documentation" },
+  { match: /(^|\/)include(\/|$)/i, role: "C/C++ public headers" },
+  { match: /(^|\/)(engine|core|kernel)(\/|$)/i, role: "core systems engine" },
+  { match: /(^|\/)(storage|wal|db|kv)(\/|$)/i, role: "storage & persistence" },
+  { match: /(^|\/)(net|network|rpc|protocol)(\/|$)/i, role: "networking & RPC" },
+  { match: /(^|\/)(math|physics|sim|geometry)(\/|$)/i, role: "math & physics" },
+  { match: /(^|\/)(render|renderer|gpu|shaders?)(\/|$)/i, role: "rendering pipeline" },
+  { match: /(^|\/)(crates|packages|apps)(\/|$)/i, role: "workspace modules" },
 ];
 
 export function inferFolderRole(path: string): string | null {
@@ -1773,6 +3057,64 @@ function collectReferencedTypes(
   return out.slice(0, MAX_BUNDLE_TYPES);
 }
 
+/**
+ * Automatically interweaves a User Action Prompt and/or Token-Efficient
+ * Evolution Log Handover directly into a generated Surgical or Plan prompt.
+ */
+export function interweaveSurgicalPrompt(
+  basePrompt: string,
+  options: {
+    userActionPrompt?: string;
+    evolutionHandover?: string;
+  },
+): string {
+  if (!basePrompt) return basePrompt;
+  const cleanTask = options.userActionPrompt?.trim() || "";
+  const cleanEvo = options.evolutionHandover?.trim() || "";
+
+  let output = basePrompt;
+
+  // 1. Replace placeholder `(describe your change here)` in ### N. TASK with the user's action prompt
+  if (cleanTask) {
+    output = output.replace(
+      /\(describe your change here\)/g,
+      cleanTask,
+    );
+  }
+
+  // 2. Inject a prominent USER ACTION DIRECTIVE & EVOLUTION HANDOVER header right after the top banner
+  const topBlocks: string[] = [];
+  if (cleanTask) {
+    topBlocks.push(
+      `>>> USER ACTION PROMPT (PRIMARY OBJECTIVE) <<<`,
+      cleanTask,
+      `>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n`,
+    );
+  }
+  if (cleanEvo) {
+    topBlocks.push(`${cleanEvo}\n`);
+  }
+
+  if (topBlocks.length > 0) {
+    const firstBannerClose = output.indexOf(
+      "================================================================================\n",
+      85,
+    );
+    if (firstBannerClose !== -1) {
+      const insertAt = firstBannerClose + 81;
+      output =
+        output.slice(0, insertAt) +
+        "\n" +
+        topBlocks.join("\n") +
+        output.slice(insertAt);
+    } else {
+      output = topBlocks.join("\n") + "\n" + output;
+    }
+  }
+
+  return output;
+}
+
 export function extractSurgicalContext(
   targetId: string,
   analysis: DepLenzAnalysisResult,
@@ -1786,6 +3128,7 @@ export function extractSurgicalContext(
   const callers = node.dependents.map((d) => d.symbol);
   const callees = node.dependencies.map((d) => d.symbol);
   const externalDeps = node.externalDependencies;
+  const targetFence = detectFenceLanguage(target.filePath);
 
   // Fix 2b: the COMPLETE target file (imports included). The output
   // contract demands a complete file back — the prompt must show one.
@@ -1867,12 +3210,12 @@ export function extractSurgicalContext(
     parts.push(
       `with your changes applied. Do not invent lines 1-${target.lineStart - 1}; they are here.`,
     );
-    parts.push(`\`\`\`typescript\n${fullTargetSource}\n\`\`\`\n`);
+    parts.push(`\`\`\`${targetFence}\n${fullTargetSource}\n\`\`\`\n`);
   } else {
     parts.push(`### ${section}. TARGET IMPLEMENTATION (${target.name})`);
     parts.push(`File: ${target.filePath}`);
     parts.push(`Signature: ${target.signature}`);
-    parts.push(`\`\`\`typescript\n${target.body}\n\`\`\`\n`);
+    parts.push(`\`\`\`${targetFence}\n${target.body}\n\`\`\`\n`);
   }
 
   if (referencedTypes.length > 0) {
@@ -1881,8 +3224,9 @@ export function extractSurgicalContext(
       `### ${section}. TYPE CONTRACTS (referenced by the signatures above)`,
     );
     for (const t of referencedTypes) {
+      const fence = detectFenceLanguage(t.filePath);
       parts.push(`// ${t.filePath}:${t.lineStart}`);
-      parts.push(`\`\`\`typescript\n${t.body}\n\`\`\``);
+      parts.push(`\`\`\`${fence}\n${t.body}\n\`\`\``);
     }
     parts.push("");
   }
@@ -1896,10 +3240,11 @@ export function extractSurgicalContext(
       `If you change ${target.name}'s contract (name, params, return shape), these MUST be updated too.`,
     );
     for (const caller of callers) {
+      const fence = detectFenceLanguage(caller.filePath);
       parts.push(`#### [Caller] ${caller.name} (${caller.kind})`);
       parts.push(`Location: ${caller.filePath}:${caller.lineStart}`);
       parts.push(`Signature: ${caller.signature}`);
-      parts.push(`\`\`\`typescript\n${caller.body}\n\`\`\`\n`);
+      parts.push(`\`\`\`${fence}\n${caller.body}\n\`\`\`\n`);
     }
   }
 
@@ -1909,10 +3254,11 @@ export function extractSurgicalContext(
       `### ${section}. DOWNSTREAM DEPENDENCIES — already exist; import and REUSE them`,
     );
     for (const callee of callees) {
+      const fence = detectFenceLanguage(callee.filePath);
       parts.push(`#### [Dependency] ${callee.name} (${callee.kind})`);
       parts.push(`Location: ${callee.filePath}:${callee.lineStart}`);
       parts.push(`Signature: ${callee.signature}`);
-      parts.push(`\`\`\`typescript\n${callee.body}\n\`\`\`\n`);
+      parts.push(`\`\`\`${fence}\n${callee.body}\n\`\`\`\n`);
     }
   }
 
@@ -2104,9 +3450,10 @@ export function buildPlannedContext(
       files.find((f) => norm.endsWith(`/${f.relativePath}`));
     if (!file || file.textContent == null) continue;
     plannedFiles.push(file.relativePath);
+    const fence = detectFenceLanguage(file.relativePath);
     extras.push(
       `#### [Planned file] ${file.relativePath}${touch.change ? ` — ${touch.change}` : ""}`,
-      `\`\`\`typescript\n${file.textContent}\n\`\`\`\n`,
+      `\`\`\`${fence}\n${file.textContent}\n\`\`\`\n`,
     );
   }
 
@@ -2143,10 +3490,42 @@ export async function buildCodebaseDependencyGraphAsync(
   try {
     const engine = getDepLenzEngine();
     const result = engine ? await engine.buildGraph(files) : null;
-    if (result) return result;
+    if (result) {
+      if (!result.projectStack) {
+        result.projectStack = detectCodebaseStack(files);
+      }
+      return result;
+    }
   } catch (err) {
     console.warn("[deplenz] native engine failed, using TS engine:", err);
   }
+
+  // Cooperative time-sliced pre-warming: when analyzing large repositories
+  // (>120 files), warm the per-file lookup index and AST/syntax caches in
+  // ~10ms slices so the main UI thread never drops frames during navigation.
+  if (files.length > 120) {
+    getFileLookupIndex(files);
+    let sliceStart = performance.now();
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const text = f.textContent;
+      if (text) {
+        if (isWebDevFile(f) && f.extension.toLowerCase() !== "toml") {
+          validateFileSyntax(text, f.relativePath, f.name);
+        }
+        if (isCodeFile(f)) {
+          extractSymbolsFromFile(text, f.relativePath, f.name);
+          extractLazyBindings(text);
+          extractTypeDeclarations(text, f.relativePath);
+        }
+      }
+      if (performance.now() - sliceStart > 10) {
+        await new Promise<void>((r) => setTimeout(r, 0));
+        sliceStart = performance.now();
+      }
+    }
+  }
+
   return buildCodebaseDependencyGraph(files);
 }
 

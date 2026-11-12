@@ -13,20 +13,17 @@ import { defineConfig, type Plugin } from "vite";
  * HTTP response headers instead.
  */
 
-const FONTS_CSS = "https://fonts.googleapis.com";
-const FONTS_FILES = "https://fonts.gstatic.com";
-
 /** Dev: permits the react-refresh inline preamble and the HMR websocket. */
 const DEV_CSP = [
   `default-src 'self'`,
   // @vitejs/plugin-react injects an inline fast-refresh preamble in dev
   `script-src 'self' 'unsafe-inline'`,
   // Vite dev injects <style> tags; React style attributes need 'unsafe-inline'
-  `style-src 'self' 'unsafe-inline' ${FONTS_CSS}`,
-  `font-src 'self' ${FONTS_FILES} data:`,
-  `img-src 'self' blob: data:`,
+  `style-src 'self' 'unsafe-inline'`,
+  `font-src 'self' data:`,
+  `img-src 'self' blob: data: myproject-asset:`,
   // ws: covers HMR on any host the dev server is reached through (localhost or LAN IP)
-  `connect-src 'self' ws: wss:`,
+  `connect-src 'self' ws: wss: myproject-asset:`,
   `worker-src 'self' blob:`,
   `frame-src 'none'`,
   `object-src 'none'`,
@@ -34,14 +31,14 @@ const DEV_CSP = [
   `form-action 'none'`,
 ].join("; ");
 
-/** Production: no inline scripts, no websockets. Fonts stay allowlisted. */
+/** Production: no inline scripts, no websockets, no external font hosts (fonts bundled locally). */
 const PROD_CSP = [
   `default-src 'self'`,
   `script-src 'self'`,
-  `style-src 'self' 'unsafe-inline' ${FONTS_CSS}`,
-  `font-src 'self' ${FONTS_FILES} data:`,
-  `img-src 'self' blob: data:`,
-  `connect-src 'self'`,
+  `style-src 'self' 'unsafe-inline'`,
+  `font-src 'self' data:`,
+  `img-src 'self' blob: data: myproject-asset:`,
+  `connect-src 'self' myproject-asset:`,
   `worker-src 'self' blob:`,
   `frame-src 'none'`,
   `object-src 'none'`,

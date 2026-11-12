@@ -11,6 +11,17 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@myproject/core": ["../../packages/core/src/index.ts", "./packages/core/src/index.ts"],
+      "@myproject/core/*": ["../../packages/core/src/*", "./packages/core/src/*"],
+      "@myproject/platform": ["../../packages/platform/src/index.ts", "./packages/platform/src/index.ts"],
+      "@myproject/platform/*": ["../../packages/platform/src/*", "./packages/platform/src/*"],
+      "@myproject/platform-web": ["../../packages/platform-web/src/index.ts", "./packages/platform-web/src/index.ts"],
+      "@myproject/platform-electron": ["../../packages/platform-electron/src/index.ts", "./packages/platform-electron/src/index.ts"],
+      "@myproject/rust-engine": ["../../packages/rust-engine/src/index.ts", "./packages/rust-engine/src/index.ts"],
+      "@myproject/ui": ["../../packages/ui/src/index.ts", "./packages/ui/src/index.ts"],
+      "@myproject/ui/*": ["../../packages/ui/src/*", "./packages/ui/src/*"]
+    }
   }
 }

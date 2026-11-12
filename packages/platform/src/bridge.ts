@@ -86,6 +86,47 @@ export interface ApplyChangesIpcResult {
   errors: string[];
 }
 
+/* ---- Native Rust Engine IPC (Phase 4) ---- */
+
+export interface EngineFileInputIpc {
+  name: string;
+  relativePath: string;
+  extension: string;
+  size: number;
+  textContent?: string;
+  absolutePath?: string;
+}
+
+export interface EngineSearchOptionsIpc {
+  query: string;
+  caseSensitive?: boolean;
+  wholeWord?: boolean;
+  isRegex?: boolean;
+  fileFilter?: string;
+}
+
+export interface EngineBuildGraphIpcResult {
+  ok: boolean;
+  backend: "rust-napi" | "node-main";
+  /** JSON-serialized or plain-object SerializedDepLenzAnalysisResult. */
+  graphJson: string | null;
+  error?: string;
+}
+
+export interface EngineSearchIpcResult {
+  ok: boolean;
+  backend: "rust-napi" | "node-main";
+  matchesJson: string | null;
+  error?: string;
+}
+
+export interface EngineEstimateTokensIpcResult {
+  ok: boolean;
+  backend: "rust-napi" | "node-main";
+  tokensJson: string | null;
+  error?: string;
+}
+
 /**
  * Presence of this global on window IS the Electron detection signal.
  * IPC payloads use null (not undefined) for maximum structured-clone safety.
@@ -131,6 +172,21 @@ export interface DesktopHostBridge {
     changes: ApplyChangeIpcFile[],
     opts: ApplyChangesIpcOptions,
   ): Promise<ApplyChangesIpcResult>;
+
+  /* ---- Native Rust Engine (Phase 4) ---- */
+  engineBuildGraph?(
+    files: EngineFileInputIpc[],
+  ): Promise<EngineBuildGraphIpcResult>;
+  engineSearch?(
+    files: EngineFileInputIpc[],
+    opts: EngineSearchOptionsIpc,
+    symbolsMapJson: string | null,
+  ): Promise<EngineSearchIpcResult>;
+  engineEstimateTokens?(
+    files: EngineFileInputIpc[],
+    includeToc: boolean,
+    includeLineNumbers: boolean,
+  ): Promise<EngineEstimateTokensIpcResult>;
 }
 
 declare global {

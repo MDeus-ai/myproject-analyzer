@@ -9,8 +9,12 @@
  */
 import { isElectronRuntime, setPlatform } from "@myproject/platform";
 import { WebPlatformBridge } from "@myproject/platform-web";
-import { ElectronPlatformBridge } from "@myproject/platform-electron";
+import {
+  createDesktopDepLenzEngine,
+  ElectronPlatformBridge,
+} from "@myproject/platform-electron";
 import { setPathTextReader } from "@myproject/core/contentReader";
+import { setDepLenzEngine } from "@myproject/core/engineBridge";
 
 if (isElectronRuntime()) {
   const host = window.myprojectDesktop!;
@@ -19,6 +23,7 @@ if (isElectronRuntime()) {
     readPathText: async (absolutePath) =>
       (await host.readFileText(absolutePath)) ?? undefined,
   });
+  setDepLenzEngine(createDesktopDepLenzEngine(host));
 } else {
   setPlatform(new WebPlatformBridge());
 }

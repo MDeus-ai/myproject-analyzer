@@ -224,3 +224,82 @@ test("a web-style import clears the apply target", async () => {
   await bridge.scanFileObjects([]); // scenario/sample load replaces the project
   await assert.rejects(() => bridge.applyChanges([], {}), /natively-opened/);
 });
+
+test("createPreviewUrl builds myproject-asset:// URLs for path-backed files", () => {
+  const bridge = new ElectronPlatformBridge(mockHost({}));
+  const pathFile = {
+    name: "logo.png",
+    source: { kind: "path", absolutePath: "D:/dev/proj/src/logo.png" },
+  } as unknown as ProcessedFile;
+
+  const url = bridge.createPreviewUrl(pathFile);
+  assert.equal(
+    url,
+    "myproject-asset://local?path=D%3A%2Fdev%2Fproj%2Fsrc%2Flogo.png",
+  );
+  // Revoking a custom protocol URL is a safe no-op
+  bridge.revokePreviewUrl(url!);
+});
+
+test("createDesktopDepLenzEngine delegates buildGraph and search over IPC and reconstructs Maps", async () => {
+  const { createDesktopDepLenzEngine } = await import("./index");
+  const baseHost = mockHost({});
+  const host: DesktopHostBridge = {
+    ...baseHost,
+    engineBuildGraph: async (files) => ({
+      ok: true,
+      backend: "rust-napi",
+      graphJson: JSON.stringify({
+        symbols: [],
+        nodesMap: {},
+        fileSymbolsMap: { [files[0].relativePath]: [] },
+        fileTypesMap: {},
+        typeIndex: {},
+        totalFunctions: 3,
+        totalComponents: 1,
+        totalHooks: 0,
+        totalDependenciesMapped: 2,
+        analyzedFilesCount: files.length,
+        diagnostics: [],
+        totalSyntaxWarnings: 0,
+        filesWithSyntaxErrors: [],
+      }),
+    }),
+    engineSearch: async (_files, opts) => ({
+      ok: true,
+      backend: "rust-napi",
+      matchesJson: JSON.stringify([
+        {
+          id: "proj/a.ts:1:1",
+          filePath: "proj/a.ts",
+          fileName: "a.ts",
+          lineNumber: 1,
+          columnNumber: 1,
+          lineText: opts.query,
+          matchLength: opts.query.length,
+        },
+      ]),
+    }),
+  };
+
+  const engine = createDesktopDepLenzEngine(host);
+  const sampleFile = {
+    name: "a.ts",
+    relativePath: "proj/a.ts",
+    extension: "ts",
+    size: 10,
+    textContent: "const x = 1;",
+  } as unknown as ProcessedFile;
+
+  const graph = await engine.buildGraph([sampleFile]);
+  assert.ok(graph);
+  assert.equal(graph.totalFunctions, 3);
+  assert.ok(graph.fileSymbolsMap instanceof Map);
+  assert.ok(graph.fileSymbolsMap.has("proj/a.ts"));
+
+  const matches = await engine.search([sampleFile], { query: "const" });
+  assert.ok(matches);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].lineText, "const");
+});
+

@@ -7,7 +7,7 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "test": "tsx --test src/codeAnalyzer.test.ts src/codeDiff.test.ts src/collisionResolver.test.ts src/content.test.ts src/depLenz.test.ts src/folderExclusions.test.ts src/folderReader.test.ts src/smartPaste.test.ts src/smartPasteVerify.test.ts src/treeBuilder.test.ts src/zipExporter.test.ts",
+    "test": "tsx --test src/codeAnalyzer.test.ts src/codeDiff.test.ts src/collisionResolver.test.ts src/content.test.ts src/depLenz.test.ts src/evolutionLog.test.ts src/folderExclusions.test.ts src/folderReader.test.ts src/smartPaste.test.ts src/smartPasteVerify.test.ts src/treeBuilder.test.ts src/zipExporter.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },

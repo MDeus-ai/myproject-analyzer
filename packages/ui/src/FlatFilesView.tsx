@@ -24,9 +24,11 @@ import {
   formatDate,
   getFileCategory,
 } from "@myproject/core/fileHelpers";
-import { triggerFileDownload } from "@myproject/core/zipExporter";
 import { copyToClipboard } from "@myproject/core/clipboard";
+import { getPlatform } from "@myproject/platform";
+import { useDebouncedValue } from "./useDebouncedValue";
 import { useVirtualRows } from "./useVirtualRows";
+import { ThemedDropdown } from "./ThemedDropdown";
 
 interface FlatFilesViewProps {
   files: ProcessedFile[];
@@ -56,6 +58,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
   onOpenAnotherFolder,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(searchQuery, 120);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"name" | "size" | "date" | "ext">(
     "name",
@@ -67,15 +70,15 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const filteredFiles = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
     return files
       .filter((file) => {
         const matchesSearch =
-          file.flattenedName
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase()) ||
-          file.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          file.relativePath.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          file.extension.toLowerCase().includes(searchQuery.toLowerCase());
+          !q ||
+          file.flattenedName.toLowerCase().includes(q) ||
+          file.name.toLowerCase().includes(q) ||
+          file.relativePath.toLowerCase().includes(q) ||
+          file.extension.toLowerCase().includes(q);
 
         if (!matchesSearch) return false;
         if (selectedCategory === "all") return true;
@@ -90,7 +93,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
         else if (sortBy === "ext") cmp = a.extension.localeCompare(b.extension);
         return sortOrder === "asc" ? cmp : -cmp;
       });
-  }, [files, searchQuery, selectedCategory, sortBy, sortOrder]);
+  }, [files, debouncedQuery, selectedCategory, sortBy, sortOrder]);
 
   // Windowed rendering: large projects have thousands of rows; mounting all
   // of them is what made tab switches and watch refreshes stutter.
@@ -107,7 +110,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, selectedCategory, sortBy, sortOrder]);
+  }, [debouncedQuery, selectedCategory, sortBy, sortOrder]);
 
   const toggleSelectAll = () => {
     if (selectedFileIds.size === filteredFiles.length) {
@@ -124,14 +127,24 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
     setSelectedFileIds(updated);
   };
 
-  const handleDownloadSingle = (file: ProcessedFile) => {
-    if (file.blob) {
-      triggerFileDownload(file.blob, file.flattenedName);
-    } else if (file.textContent) {
-      triggerFileDownload(
-        new Blob([file.textContent], { type: file.type }),
+  const handleDownloadSingle = async (file: ProcessedFile) => {
+    const platform = getPlatform();
+    const blob = file.source?.blob ?? file.blob;
+    if (blob) {
+      await platform.saveBlob(blob, file.flattenedName);
+    } else if (file.textContent !== undefined) {
+      await platform.saveBlob(
+        new Blob([file.textContent], { type: file.type || "text/plain" }),
         file.flattenedName,
       );
+    } else {
+      const text = await platform.readText(file);
+      if (text !== undefined) {
+        await platform.saveBlob(
+          new Blob([text], { type: file.type || "text/plain" }),
+          file.flattenedName,
+        );
+      }
     }
   };
 
@@ -234,40 +247,74 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
 
         {/* Right controls */}
         <div className="flex items-center space-x-2 ml-auto">
-          <select
+          <ThemedDropdown<CollisionStrategy>
             id="collision-select"
-            aria-label="Duplicate handling strategy"
             value={collisionStrategy}
-            onChange={(e) =>
-              onStrategyChange(e.target.value as CollisionStrategy)
-            }
-            className="surface-raised text-slate-300 text-xs rounded-lg px-2 py-1.5 border border-chrome focus:outline-none focus:border-purple-500 cursor-pointer"
-          >
-            <option value="enumerate">Auto-number duplicates</option>
-            <option value="prefix-path">Prefix path</option>
-            <option value="overwrite">Overwrite</option>
-          </select>
+            onChange={onStrategyChange}
+            ariaLabel="Duplicate handling strategy"
+            menuTitle="Duplicate File Strategy"
+            align="right"
+            menuWidthClass="w-64"
+            options={[
+              {
+                value: "enumerate",
+                label: "Auto-number duplicates",
+                description: "Appends _1, _2 to colliding filenames",
+              },
+              {
+                value: "prefix-path",
+                label: "Prefix folder path",
+                description: "Prepends parent folder names (src_utils_file)",
+              },
+              {
+                value: "overwrite",
+                label: "Overwrite duplicates",
+                description: "Keeps the last encountered file with same name",
+              },
+            ]}
+          />
 
-          <div className="flex items-center space-x-1 surface-raised px-2 py-1.5 rounded-lg border border-chrome text-xs text-slate-300">
-            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
-            <select
+          <div className="flex items-center space-x-1">
+            <ThemedDropdown<"name" | "size" | "date" | "ext">
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              aria-label="Sort files by"
-              className="bg-transparent focus:outline-none cursor-pointer"
-            >
-              <option value="name">Name</option>
-              <option value="size">Size</option>
-              <option value="date">Date</option>
-              <option value="ext">Ext</option>
-            </select>
+              onChange={(val) => setSortBy(val)}
+              ariaLabel="Sort files by"
+              menuTitle="Sort Flattened Files"
+              align="right"
+              menuWidthClass="w-56"
+              triggerIcon={<ArrowUpDown className="w-3.5 h-3.5" />}
+              triggerPrefix="Sort:"
+              options={[
+                {
+                  value: "name",
+                  label: "Name",
+                  description: "Alphabetical by flattened filename",
+                },
+                {
+                  value: "size",
+                  label: "File Size",
+                  description: "Byte size of each file",
+                },
+                {
+                  value: "date",
+                  label: "Modified Date",
+                  description: "Last modified timestamp",
+                },
+                {
+                  value: "ext",
+                  label: "Extension",
+                  description: "Group by file type extension",
+                },
+              ]}
+            />
             <button
               type="button"
               onClick={() =>
                 setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
               }
-              className="px-1 text-accent hover:opacity-80 font-mono font-bold cursor-pointer"
-              title="Toggle sort direction"
+              className="px-2 py-1.5 rounded-lg surface-raised border border-chrome text-accent hover:bg-[var(--surface-raised-hover)] font-mono text-xs font-bold cursor-pointer transition-colors"
+              title={`Sort direction: ${sortOrder === "asc" ? "Ascending" : "Descending"}`}
+              aria-label="Toggle sort direction"
             >
               {sortOrder === "asc" ? "↑" : "↓"}
             </button>

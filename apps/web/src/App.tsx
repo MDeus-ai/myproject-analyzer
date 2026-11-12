@@ -11,6 +11,7 @@ import React, {
   useCallback,
 } from "react";
 import { DesktopHeader } from "@myproject/ui";
+import { DesktopLobby } from "@myproject/ui";
 import { HomePage } from "@myproject/ui";
 import { FolderDropzone } from "@myproject/ui";
 import { FlatFilesView } from "@myproject/ui";
@@ -34,12 +35,8 @@ import {
 } from "@myproject/core/types";
 import { buildFolderTree } from "@myproject/core/treeBuilder";
 import { resolveCollisions } from "@myproject/core/collisionResolver";
-import {
-  createFlatZip,
-  triggerFileDownload,
-  ZipProgress,
-} from "@myproject/core/zipExporter";
-import { generateFolderPdf, downloadPdf } from "@myproject/core/pdfGenerator";
+import { createFlatZip, ZipProgress } from "@myproject/core/zipExporter";
+import { generateFolderPdf } from "@myproject/core/pdfGenerator";
 import {
   getScenarioProject,
   SampleScenarioId,
@@ -48,9 +45,18 @@ import { processFileList, ScanProgress } from "@myproject/core/folderReader";
 import { isSecretFile } from "@myproject/core/secretsDetector";
 import { DEFAULT_EXCLUSION_RULES } from "@myproject/core/folderExclusions";
 import { getFileExtension } from "@myproject/core/fileHelpers";
+import { detectCodebaseStack } from "@myproject/core/depLenz";
+import {
+  recordProjectInHistory,
+  ProjectHistoryEntry,
+} from "@myproject/core/themes";
+import {
+  createEvolutionEntry,
+  appendEvolutionEntry,
+} from "@myproject/core/evolutionLog";
 import { getPlatform } from "@myproject/platform";
 import type { WatchEventBatch } from "@myproject/platform";
-import { ShieldAlert, ArrowRight, CheckCircle2, X } from "lucide-react";
+import { ShieldAlert, ArrowRight, CheckCircle2, X, Terminal } from "lucide-react";
 
 interface ImportToast {
   rootName: string;
@@ -60,6 +66,7 @@ interface ImportToast {
 
 export default function App() {
   const [currentView, setCurrentView] = useState<"home" | "workspace">("home");
+  const [homeSubMode, setHomeSubMode] = useState<"lobby" | "guide">("lobby");
   const [rawFiles, setRawFiles] = useState<ProcessedFile[]>([]);
   const [rootFolderName, setRootFolderName] = useState<string>("");
   const [collisionStrategy, setCollisionStrategy] =
@@ -157,7 +164,12 @@ export default function App() {
 
   // Handle files loaded from picker or drag-drop
   const handleFilesLoaded = useCallback(
-    (files: ProcessedFile[], folderName: string, gitignoreSkipped = 0) => {
+    (
+      files: ProcessedFile[],
+      folderName: string,
+      gitignoreSkipped = 0,
+      sampleScenarioId?: "web" | "rust" | "cpp",
+    ) => {
       setRawFiles(files);
       setRootFolderName(folderName);
       setActiveTab("files");
@@ -167,6 +179,69 @@ export default function App() {
         fileCount: files.length,
         gitignoreSkipped,
       });
+
+      // Record project in persistent Desktop Lobby history
+      try {
+        const stackInfo = detectCodebaseStack(files);
+        const totalSize = files.reduce((acc, f) => acc + (f.size || 0), 0);
+        const extCounts = new Map<string, number>();
+        for (const f of files) {
+          const ext = f.extension
+            ? `.${f.extension.replace(/^\./, "")}`
+            : "";
+          if (ext) extCounts.set(ext, (extCounts.get(ext) ?? 0) + 1);
+        }
+        const topExtensions = [...extCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 4)
+          .map(([ext]) => ext);
+
+        const inferredSample: "web" | "rust" | "cpp" | undefined =
+          sampleScenarioId ??
+          (folderName === "acme-saas-platform"
+            ? "web"
+            : folderName === "orbit-kv-engine"
+              ? "rust"
+              : folderName === "chrono-physics-engine"
+                ? "cpp"
+                : undefined);
+
+        const canCacheInline =
+          !inferredSample && files.length <= 45 && totalSize <= 240_000;
+
+        recordProjectInHistory({
+          id: inferredSample ? `sample:${inferredSample}` : `folder:${folderName}`,
+          name: folderName,
+          fileCount: files.length,
+          totalSize,
+          stackLabel: stackInfo.label,
+          stackKind:
+            stackInfo.primary === "rust"
+              ? "rust"
+              : stackInfo.primary === "cpp"
+                ? "cpp"
+                : stackInfo.primary === "web"
+                  ? "web"
+                  : stackInfo.primary === "polyglot"
+                    ? "polyglot"
+                    : "general",
+          sourceKind: inferredSample ? "sample" : "folder",
+          sampleScenarioId: inferredSample,
+          topExtensions,
+          cachedFiles: canCacheInline
+            ? files.map((f) => ({
+                name: f.name,
+                originalPath: f.relativePath,
+                size: f.size,
+                type: f.type,
+                lastModified: f.lastModified,
+                content: f.textContent,
+              }))
+            : undefined,
+        });
+      } catch {
+        // Non-fatal history persistence
+      }
     },
     [],
   );
@@ -290,6 +365,33 @@ export default function App() {
     setWatchNotice(
       `${changed} file${changed === 1 ? "" : "s"} updated on disk — views refreshed`,
     );
+
+    try {
+      const evoChanges = [
+        ...freshFiles.slice(0, 4).map((f) => ({
+          path: f.relativePath,
+          action: "modify" as const,
+          addedLines: 4,
+          removedLines: 1,
+          symbolsChanged: [] as string[],
+        })),
+        ...[...removedRels].slice(0, 2).map((rel) => ({
+          path: rel,
+          action: "delete" as const,
+          addedLines: 0,
+          removedLines: 4,
+          symbolsChanged: [] as string[],
+        })),
+      ];
+      const entry = createEvolutionEntry({
+        source: "live-watch",
+        summary: `Live disk edit (${changed} file${changed === 1 ? "" : "s"} updated)`,
+        changes: evoChanges,
+      });
+      appendEvolutionEntry(ctx.name, entry);
+    } catch {
+      // ignore
+    }
   }, []);
 
   const stopWatching = useCallback(async () => {
@@ -488,6 +590,41 @@ export default function App() {
     [loadScenario],
   );
 
+  // Load a project from the Desktop Lobby history
+  const handleLoadHistoryEntry = useCallback(
+    (entry: ProjectHistoryEntry) => {
+      if (entry.sampleScenarioId) {
+        void loadScenario(entry.sampleScenarioId);
+        return;
+      }
+      if (entry.cachedFiles && entry.cachedFiles.length > 0) {
+        const restored: ProcessedFile[] = entry.cachedFiles.map((cf, idx) => {
+          const segs = cf.originalPath.split("/");
+          return {
+            id: `hist-${idx}-${cf.originalPath}`,
+            name: cf.name,
+            originalName: cf.name,
+            flattenedName: cf.name,
+            relativePath: cf.originalPath,
+            pathSegments: segs,
+            directoryPath: segs.length > 2 ? segs.slice(1, -1).join("/") : "",
+            size: cf.size,
+            type: cf.type,
+            extension: getFileExtension(cf.name),
+            lastModified: cf.lastModified,
+            textContent: cf.content,
+          } as unknown as ProcessedFile;
+        });
+        setExcludedFolders([]);
+        setGitignoreExcludedCount(0);
+        handleFilesLoaded(restored, entry.name, 0);
+        return;
+      }
+      handleOpenFolder();
+    },
+    [loadScenario, handleFilesLoaded, handleOpenFolder],
+  );
+
   // Check URL query parameters for ?autostart=1
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -512,7 +649,7 @@ export default function App() {
         /[^a-zA-Z0-9_-]/g,
         "_",
       );
-      triggerFileDownload(zipBlob, `${safeName}_flat_files.zip`);
+      await getPlatform().saveBlob(zipBlob, `${safeName}_flat_files.zip`);
     } catch (err) {
       console.error("Failed to create ZIP:", err);
     } finally {
@@ -538,7 +675,8 @@ export default function App() {
     });
     const dateStr = new Date().toISOString().split("T")[0];
     const safeName = stats.rootName.replace(/[^a-zA-Z0-9_-]/g, "_");
-    downloadPdf(doc, `${safeName}_structure_${dateStr}.pdf`);
+    const pdfBlob = doc.output("blob");
+    void getPlatform().saveBlob(pdfBlob, `${safeName}_structure_${dateStr}.pdf`);
   }, [rootNode, stats, resolvedFiles]);
 
   // Global Keyboard Shortcuts — real dependency array (was: re-registered on
@@ -641,41 +779,59 @@ export default function App() {
       />
 
       {currentView === "home" ? (
-        /* ================= SOFTWARE HOMEPAGE ================= */
+        /* ================= DESKTOP SOFTWARE LOBBY / GUIDE ================= */
         <div className="flex-1 overflow-y-auto flex flex-col">
-          {/* Active project banner on homepage if files exist in memory */}
-          {resolvedFiles.length > 0 && (
-            <div className="surface-header border-b border-chrome px-4 py-2 flex items-center justify-between text-xs text-slate-300 sticky top-0 z-50">
-              <div className="flex items-center space-x-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>
-                  Active workspace loaded:{" "}
-                  <strong className="font-mono text-slate-100">
-                    {rootFolderName}
-                  </strong>{" "}
-                  ({resolvedFiles.length} files)
-                </span>
+          {homeSubMode === "lobby" ? (
+            <DesktopLobby
+              onScanResult={handleScanResult}
+              onOpenFolderPicker={handleOpenFolder}
+              onLoadScenario={handleLoadScenario}
+              onLoadHistoryEntry={handleLoadHistoryEntry}
+              onScanProgress={setImportProgress}
+              onSwitchToClassicGuide={() => setHomeSubMode("guide")}
+              activeProjectName={rootFolderName}
+              activeFileCount={resolvedFiles.length}
+              onReturnToWorkspace={() => setCurrentView("workspace")}
+            />
+          ) : (
+            <div className="flex-1 flex flex-col">
+              <div className="surface-header border-b border-chrome px-6 py-2.5 flex items-center justify-between text-xs text-slate-300 sticky top-0 z-50">
+                <div className="flex items-center space-x-2">
+                  <Terminal className="w-4 h-4 text-purple-400" />
+                  <span>Product Tour & Architecture Overview</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {resolvedFiles.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentView("workspace")}
+                      className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-all shadow-sm cursor-pointer"
+                    >
+                      <span>Return to Workspace ({rootFolderName})</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setHomeSubMode("lobby")}
+                    className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-all shadow-sm cursor-pointer"
+                  >
+                    <span>Back to Software Lobby</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setCurrentView("workspace")}
-                className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-all shadow-sm"
-              >
-                <span>Return to Workspace</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <HomePage
+                onScanResult={handleScanResult}
+                onLoadSample={handleLoadSample}
+                onLoadSampleWithHeavyFolders={handleLoadSampleWithHeavy}
+                onLoadScenario={handleLoadScenario}
+                onOpenFolderPicker={handleOpenFolder}
+                onScanProgress={setImportProgress}
+                showScenarios={showScenarios}
+              />
             </div>
           )}
-
-          <HomePage
-            onScanResult={handleScanResult}
-            onLoadSample={handleLoadSample}
-            onLoadSampleWithHeavyFolders={handleLoadSampleWithHeavy}
-            onLoadScenario={handleLoadScenario}
-            onOpenFolderPicker={handleOpenFolder}
-            onScanProgress={setImportProgress}
-            showScenarios={showScenarios}
-          />
         </div>
       ) : (
         /* ================= WORKSPACE INTERFACE ================= */

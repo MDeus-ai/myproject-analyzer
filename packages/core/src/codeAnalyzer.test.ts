@@ -6,6 +6,7 @@ import {
   combineMultipleCodeFiles,
   countLines,
   estimateTokens,
+  estimateCombinedTokensByStyle,
   getRelativePathFromRoot,
 } from "@myproject/core/codeAnalyzer";
 import { ProcessedFile } from "@myproject/core/types";
@@ -291,3 +292,18 @@ test("markdown combine uses a markdown-native document header", () => {
   assert.ok(combined.includes("```html"));
   assert.ok(combined.includes("<!-- END OF FILE: public/index.html -->"));
 });
+
+test("estimateCombinedTokensByStyle computes positive token estimates for all 6 styles", () => {
+  const est = estimateCombinedTokensByStyle(sampleBundle, {
+    rootFolderName: "app",
+    includeLineNumbers: true,
+    addTableOfContents: true,
+  });
+  assert.ok(est.standard > est.compact);
+  assert.ok(est.compact > 0);
+  assert.ok(est.markdown > 0);
+  assert.ok(est.xml > 0);
+  assert.ok(est.jsonl > 0);
+  assert.ok(est.json > 0);
+});
+

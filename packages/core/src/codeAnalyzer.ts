@@ -64,7 +64,11 @@ const EXTENSION_MAP: Record<
   cc: { language: "C++ Source", fileType: "cc", category: "systems" },
   cxx: { language: "C++ Source", fileType: "cxx", category: "systems" },
   h: { language: "C/C++ Header", fileType: "h", category: "systems" },
+  hh: { language: "C++ Header", fileType: "hh", category: "systems" },
   hpp: { language: "C++ Header", fileType: "hpp", category: "systems" },
+  hxx: { language: "C++ Header", fileType: "hxx", category: "systems" },
+  ino: { language: "C++ / Arduino Sketch", fileType: "ino", category: "systems" },
+  cmake: { language: "CMake Script", fileType: "cmake", category: "devops" },
   cs: { language: "C#", fileType: "cs", category: "backend" },
   php: { language: "PHP", fileType: "php", category: "backend" },
   rb: { language: "Ruby", fileType: "rb", category: "backend" },
@@ -180,6 +184,7 @@ const FULLNAME_MAP: Record<string, { language: string; category: string }> = {
   authors: { language: "Authors List", category: "docs" },
   procfile: { language: "Procfile", category: "config" },
   jenkinsfile: { language: "Jenkins Pipeline", category: "config" },
+  "cmakelists.txt": { language: "CMake Build Configuration", category: "devops" },
 };
 
 /**
@@ -331,11 +336,15 @@ export interface AnalyzerFormatOptions {
 }
 
 /**
- * Counts total lines in a string of code.
+ * Counts total lines in a string of code without allocating a split array.
  */
 export function countLines(text: string): number {
   if (!text) return 0;
-  return text.split("\n").length;
+  let count = 1;
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) count++;
+  }
+  return count;
 }
 
 /**
@@ -344,6 +353,93 @@ export function countLines(text: string): number {
 export function estimateTokens(text: string): number {
   if (!text) return 0;
   return Math.ceil(text.length / 4);
+}
+
+/**
+ * Fast O(files) token estimator for all 6 AnalyzerStyle formats without
+ * allocating 6 separate multi-megabyte strings on the main thread.
+ */
+export function estimateCombinedTokensByStyle(
+  files: ProcessedFile[],
+  options: {
+    includeLineNumbers?: boolean;
+    rootFolderName?: string;
+    addTableOfContents?: boolean;
+  } = {},
+): Record<AnalyzerStyle, number> {
+  if (files.length === 0) {
+    return {
+      standard: 0,
+      compact: 0,
+      markdown: 0,
+      xml: 0,
+      jsonl: 0,
+      json: 0,
+    };
+  }
+
+  const {
+    includeLineNumbers = false,
+    rootFolderName = "",
+    addTableOfContents = true,
+  } = options;
+
+  let rawContentChars = 0;
+  let totalLines = 0;
+  let totalPathChars = 0;
+  let lineNumGutterChars = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const content = f.textContent || getMissingContentReason(f);
+    const len = content.length;
+    const lines = countLines(content);
+    rawContentChars += len;
+    totalLines += lines;
+    const rel = getRelativePathFromRoot(f, rootFolderName);
+    totalPathChars += rel.length + f.name.length;
+    if (includeLineNumbers && len > 0) {
+      const padLen = String(lines).length;
+      lineNumGutterChars += lines * (padLen + 3);
+    }
+  }
+
+  const n = files.length;
+  const tocChars =
+    addTableOfContents && n > 1 ? n * 38 + totalPathChars * 0.6 : 0;
+
+  const standardChars =
+    260 +
+    tocChars +
+    rawContentChars +
+    lineNumGutterChars +
+    n * 310 +
+    totalPathChars * 2;
+  const compactChars = rawContentChars + n * 14 + totalPathChars * 0.6;
+  const markdownChars =
+    160 +
+    tocChars +
+    rawContentChars +
+    lineNumGutterChars +
+    n * 145 +
+    totalPathChars * 1.5;
+  const xmlChars =
+    110 + rawContentChars + n * 120 + totalPathChars * 1.2;
+  // JSON escaping adds ~6% overhead on code strings (newlines, quotes, indents)
+  const jsonEscapedContent = Math.ceil(rawContentChars * 1.06) + totalLines;
+  const jsonlChars =
+    120 + totalPathChars * 1.8 + jsonEscapedContent + n * 135;
+  const jsonChars =
+    160 + totalPathChars * 1.8 + jsonEscapedContent + n * 195;
+
+  return {
+    standard: Math.ceil(standardChars / 4),
+    compact: Math.ceil(compactChars / 4),
+    markdown: Math.ceil(markdownChars / 4),
+    xml: Math.ceil(xmlChars / 4),
+    jsonl: Math.ceil(jsonlChars / 4),
+    json: Math.ceil(jsonChars / 4),
+  };
 }
 
 /**
