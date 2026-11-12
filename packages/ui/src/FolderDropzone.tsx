@@ -15,14 +15,22 @@ import {
   ScanProgress,
 } from "@myproject/core/folderReader";
 import { FolderScanResult } from "@myproject/core/types";
-import { SAMPLE_SCENARIOS, SampleScenarioId } from "@myproject/core/sampleProject";
+import {
+  SAMPLE_SCENARIOS,
+  SampleScenarioId,
+} from "@myproject/core/sampleProject";
 
 interface FolderDropzoneProps {
   onScanResult: (result: FolderScanResult) => void;
   onLoadSample: () => void;
   onLoadSampleWithHeavyFolders?: () => void;
   onLoadScenario?: (id: SampleScenarioId) => void;
+  /** Scan/import progress, surfaced through the global overlay. */
   onScanProgress?: (progress: ScanProgress | null) => void;
+  /** Override for the browse button (desktop routes to the native dialog
+   *  via the platform bridge). When absent, the hidden webkitdirectory
+   *  input is used (web behavior). */
+  onBrowseClick?: () => void;
   isLoading?: boolean;
   /** Test scenarios are developer QA — rendered only behind ?dev=1. */
   showScenarios?: boolean;
@@ -34,6 +42,7 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
   onLoadSampleWithHeavyFolders,
   onLoadScenario,
   onScanProgress,
+  onBrowseClick,
   isLoading,
   showScenarios,
 }) => {
@@ -113,6 +122,10 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
   };
 
   const handleBrowseClick = () => {
+    if (onBrowseClick) {
+      onBrowseClick();
+      return;
+    }
     fileInputRef.current?.click();
   };
 

@@ -1,11 +1,24 @@
 /**
- * Platform composition root for the WEB app.
+ * Platform composition root — SHARED by web and desktop (the desktop shell
+ * loads this same renderer). Registers the right bridge before React
+ * renders, so getPlatform() always has an implementation.
  *
- * Registers the browser bridge before React renders, so any component
- * calling getPlatform() always has an implementation available.
- * On web: all files are blob-backed, so no PathTextReader is needed.
+ * Electron: preload injected window.myprojectDesktop -> native bridge, plus
+ * the IPC-backed PathTextReader for path-backed files (ADR-002).
+ * Web: browser bridge; all files are blob-backed, no reader needed.
  */
-import { setPlatform } from "@myproject/platform";
+import { isElectronRuntime, setPlatform } from "@myproject/platform";
 import { WebPlatformBridge } from "@myproject/platform-web";
+import { ElectronPlatformBridge } from "@myproject/platform-electron";
+import { setPathTextReader } from "@myproject/core/contentReader";
 
-setPlatform(new WebPlatformBridge());
+if (isElectronRuntime()) {
+  const host = window.myprojectDesktop!;
+  setPlatform(new ElectronPlatformBridge(host));
+  setPathTextReader({
+    readPathText: async (absolutePath) =>
+      (await host.readFileText(absolutePath)) ?? undefined,
+  });
+} else {
+  setPlatform(new WebPlatformBridge());
+}

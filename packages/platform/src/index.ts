@@ -10,6 +10,7 @@
 import type { PlatformBridge } from "./types";
 
 export * from "./types";
+export * from "./bridge";
 
 let activeBridge: PlatformBridge | null = null;
 
@@ -35,5 +36,5 @@ export function hasPlatform(): boolean {
 
 /** True when running inside the Electron desktop shell (preload injected). */
 export function isElectronRuntime(): boolean {
-  return typeof window !== "undefined" && "mpBridge" in window;
+  return typeof window !== "undefined" && !!window.myprojectDesktop;
 }

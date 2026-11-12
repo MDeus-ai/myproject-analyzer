@@ -45,6 +45,7 @@ import {
 } from "@myproject/core/sampleProject";
 import { processFileList, ScanProgress } from "@myproject/core/folderReader";
 import { isSecretFile } from "@myproject/core/secretsDetector";
+import { getPlatform } from "@myproject/platform";
 import { ShieldAlert, ArrowRight, CheckCircle2, X } from "lucide-react";
 
 interface ImportToast {
@@ -174,6 +175,20 @@ export default function App() {
     [handleFilesLoaded],
   );
 
+  // Open Folder routes through the platform bridge: native dialog + native
+  // scan on desktop (capabilities.nativeDialogs), hidden webkitdirectory
+  // input on web. Both paths converge on handleScanResult.
+  const handleOpenFolder = useCallback(() => {
+    const platform = getPlatform();
+    if (platform.capabilities.nativeDialogs) {
+      void platform.pickFolder().then((result: FolderScanResult | null) => {
+        if (result) handleScanResult(result);
+      });
+      return;
+    }
+    folderInputRef.current?.click();
+  }, [handleScanResult]);
+
   // User confirmed their choices in the review modal
   const handleConfirmExclusionImport = useCallback(
     (
@@ -278,7 +293,7 @@ export default function App() {
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "o") {
         e.preventDefault();
-        folderInputRef.current?.click();
+        handleOpenFolder();
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (resolvedFiles.length > 0 && !isZipping) {
@@ -389,7 +404,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-dvh w-full bg-[var(--app-bg)] text-slate-100 overflow-hidden font-sans">
-      {/* Hidden WebKit folder input */}
+      {/* Hidden WebKit folder input (web fallback path) */}
       <input
         ref={folderInputRef}
         type="file"
@@ -433,7 +448,7 @@ export default function App() {
             onLoadSample={handleLoadSample}
             onLoadSampleWithHeavyFolders={handleLoadSampleWithHeavy}
             onLoadScenario={handleLoadScenario}
-            onOpenFolderPicker={() => folderInputRef.current?.click()}
+            onOpenFolderPicker={handleOpenFolder}
             onScanProgress={setImportProgress}
             showScenarios={showScenarios}
           />
@@ -446,7 +461,7 @@ export default function App() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             stats={stats}
-            onOpenFolderClick={() => folderInputRef.current?.click()}
+            onOpenFolderClick={handleOpenFolder}
             onLoadSampleClick={handleLoadSample}
             onDownloadZipClick={handleDownloadZip}
             onDownloadPdfClick={handleDownloadPdfDirect}
@@ -529,6 +544,7 @@ export default function App() {
                   onLoadSampleWithHeavyFolders={handleLoadSampleWithHeavy}
                   onLoadScenario={handleLoadScenario}
                   onScanProgress={setImportProgress}
+                  onBrowseClick={handleOpenFolder}
                   showScenarios={showScenarios}
                 />
               </div>
@@ -544,7 +560,7 @@ export default function App() {
                     onDownloadAllZip={handleDownloadZip}
                     isZipping={isZipping}
                     zipProgress={zipProgress}
-                    onOpenAnotherFolder={() => folderInputRef.current?.click()}
+                    onOpenAnotherFolder={handleOpenFolder}
                   />
                 )}
 

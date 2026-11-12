@@ -530,6 +530,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               onLoadSampleWithHeavyFolders={onLoadSampleWithHeavyFolders}
               onLoadScenario={onLoadScenario}
               onScanProgress={onScanProgress}
+              onBrowseClick={onOpenFolderPicker}
             />
           </div>
 

@@ -1,11 +1,15 @@
 import { ProcessedFile, FolderScanResult } from "@myproject/core/types";
+import { getPathTextReader } from "@myproject/core/contentReader";
 import { getFileExtension } from "@myproject/core/fileHelpers";
 import {
   DEFAULT_EXCLUSION_RULES,
   filterFilesByExclusions,
   matchExcludedSegment,
 } from "@myproject/core/folderExclusions";
-import { isTextReadableFile, MAX_TEXT_READ_SIZE } from "@myproject/core/codeAnalyzer";
+import {
+  isTextReadableFile,
+  MAX_TEXT_READ_SIZE,
+} from "@myproject/core/codeAnalyzer";
 import {
   extractGitignoreRules,
   filterFilesByGitignore,

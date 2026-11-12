@@ -7,10 +7,12 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "npm run build && electron .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/fs-walk.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "@myproject/platform": "*",
     "electron": "^45.3.0",
     "esbuild": "^0.28.2"
   }
