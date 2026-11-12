@@ -1,10 +1,24 @@
+# Dependencies & build output (any depth — covers apps/ and packages/)
 node_modules/
-build/
 dist/
+build/
 coverage/
-.DS_Store
+
+# Logs
 *.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tooling
 .playwright-cli/
 .aistudio/
+
+# Env files (any depth)
 .env*
 !.env.example
+
+# Electron packaging output (build artifacts — never commit)
+apps/desktop/release/
+apps/desktop/renderer/

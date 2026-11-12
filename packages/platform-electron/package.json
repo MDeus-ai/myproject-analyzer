@@ -1,0 +1,17 @@
+{
+  "name": "@myproject/platform-electron",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/index.test.ts"
+  },
+  "dependencies": {
+    "@myproject/core": "*",
+    "@myproject/platform": "*"
+  }
+}

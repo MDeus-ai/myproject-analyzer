@@ -1,0 +1,30 @@
+appId: com.myproject.analyzer
+productName: MyProject Analyzer
+copyright: MIT License
+asar: true
+
+# Never publish anywhere — CI uploads the installer as a workflow artifact.
+publish: null
+
+directories:
+  output: release
+
+# Minimal file set: bundled processes, staged renderer, icons.
+# (package.json is always included by electron-builder.)
+files:
+  - dist/**
+  - renderer/**
+  - assets/**
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: assets/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false # per-user install — no admin prompt
+  allowToChangeInstallationDirectory: true
+  shortcutName: MyProject Analyzer
+  artifactName: ${productName}-Setup-${version}.${ext}

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, beta-version]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install (all workspaces)
+        run: npm ci
+
+      - name: Core test suite
+        run: npm test
+
+      - name: Desktop + bridge test suites
+        run: |
+          npm test -w @myproject/desktop
+          npm test -w @myproject/platform-electron
+
+      - name: Typecheck all packages
+        run: npm run typecheck
+
+      - name: Web production build
+        run: npm run build
+
+  package-windows:
+    needs: verify
+    runs-on: windows-latest
+    # Manual gate: pull requests don't get an installer until the workflow
+    # has produced a green artifact at least once. Flip to `if: ${{ true }}`
+    # afterwards if you want one per PR.
+    if: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install (all workspaces)
+        run: npm ci
+
+      - name: Build Windows installer (unsigned)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist -w @myproject/desktop
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: myproject-analyzer-windows
+          path: apps/desktop/release/*.exe
+          retention-days: 30

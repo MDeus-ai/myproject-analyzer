@@ -1,0 +1,27 @@
+{
+  "name": "@myproject/desktop",
+  "productName": "MyProject Analyzer",
+  "version": "0.1.0",
+  "author": "MDeus-ai",
+  "private": true,
+  "description": "Electron shell — hosts the shared renderer with native capabilities",
+  "main": "dist/main.mjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/fs-walk.test.ts src/watch-batcher.test.ts src/watch-filter.test.ts src/apply-plan.test.ts src/window-state.test.ts src/external-url.test.ts src/security-invariants.test.ts",
+    "prepackage": "node scripts/prepackage.mjs",
+    "dist": "npm run build && npm run prepackage && electron-builder"
+  },
+  "devDependencies": {
+    "@myproject/platform": "*",
+    "@types/node": "^22.20.5",
+    "electron": "45.3.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.2"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3"
+  }
+}
