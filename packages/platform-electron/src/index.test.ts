@@ -17,6 +17,12 @@ function mockHost(opts: MockHostOptions): DesktopHostBridge & {
   return {
     requestedReads,
     platform: "electron",
+    applyChanges: async () => ({
+      ok: true,
+      files: [],
+      backupDir: null,
+      errors: [],
+    }),
     versions: { electron: "0", chrome: "0", node: "0" },
     pickFolder: async () => opts.pick ?? { canceled: true },
     walkFolder: async () => ({ ok: true, entries: opts.entries ?? [] }),
@@ -27,6 +33,10 @@ function mockHost(opts: MockHostOptions): DesktopHostBridge & {
     },
     saveFile: async () => ({ saved: true }),
     getPathForFile: () => "",
+    // ---- Phase 2: watch surface (required by DesktopHostBridge) ----
+    startWatch: async () => ({ ok: true, sessionId: "s1" }),
+    stopWatch: async () => ({ ok: true }),
+    onWatchEvent: () => () => {},
   };
 }
 
@@ -87,6 +97,9 @@ test("native scan maps to FolderScanResult with path-backed sources", async () =
   assert.ok(result.files.every((f) => f.name !== "secret-token.txt"));
   assert.equal(result.gitignoreRemovedFiles?.length, 1);
   assert.equal(result.gitignoreRemovedFiles?.[0].pattern, "secret-*");
+
+  // Phase 2: native scans stamp the absolute root so the renderer can watch
+  assert.equal(result.rootAbsolutePath, "D:\\dev\\proj");
 });
 
 test("readText prefers the path channel, falls back to blob", async () => {
@@ -120,4 +133,94 @@ test("saveBlob forwards bytes to the native save dialog", async () => {
     "out.zip",
   );
   assert.deepEqual(saved, { name: "out.zip", size: 5 });
+});
+
+test("watch methods map IPC results to the PlatformBridge contract", async () => {
+  const bridge = new ElectronPlatformBridge(mockHost({}));
+  assert.equal(bridge.capabilities.watch, true);
+  assert.equal(
+    await bridge.startWatch("D:\\dev\\proj", {
+      excludedPatterns: ["node_modules"],
+      respectGitignore: true,
+    }),
+    "s1",
+  );
+  await bridge.stopWatch("s1"); // must not throw
+
+  const batches: unknown[] = [];
+  const unsub = bridge.onWatchEvent((b) => batches.push(b));
+  assert.equal(typeof unsub, "function");
+  unsub();
+});
+
+test("startWatch surfaces the host error", async () => {
+  const host = mockHost({});
+  host.startWatch = async () => ({ ok: false, error: "nope" });
+  await assert.rejects(
+    () =>
+      new ElectronPlatformBridge(host).startWatch("D:\\x", {
+        excludedPatterns: [],
+        respectGitignore: false,
+      }),
+    /nope/,
+  );
+});
+test("applyChanges requires a prior native pick", async () => {
+  const bridge = new ElectronPlatformBridge(mockHost({}));
+  await assert.rejects(() => bridge.applyChanges([], {}), /natively-opened/);
+});
+
+test("applyChanges maps DTOs and converts null backupDir", async () => {
+  let captured: { root: string; changes: unknown; opts: unknown } | null = null;
+  const host = mockHost({
+    pick: { canceled: false, path: "D:\\dev\\proj" },
+    entries: [],
+  });
+  host.applyChanges = async (root, changes, opts) => {
+    captured = { root, changes, opts };
+    return {
+      ok: true,
+      files: [{ path: "src/a.ts", action: "modified" }],
+      backupDir: null,
+      errors: [],
+    };
+  };
+  const bridge = new ElectronPlatformBridge(host);
+  await bridge.pickFolder();
+
+  const result = await bridge.applyChanges(
+    [
+      {
+        path: "src/a.ts",
+        action: "modify",
+        content: "x",
+        markerCount: 0,
+        existsInProject: true,
+      },
+    ],
+    { stripMarkers: true },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.backupDir, undefined); // null -> undefined
+  assert.equal(captured!.root, "D:\\dev\\proj");
+  assert.deepEqual(captured!.changes, [
+    { path: "src/a.ts", action: "modify", content: "x" },
+  ]);
+  assert.deepEqual(captured!.opts, {
+    dryRun: false,
+    stripMarkers: true,
+    force: false,
+  });
+});
+
+test("a web-style import clears the apply target", async () => {
+  const host = mockHost({
+    pick: { canceled: false, path: "D:\\dev\\proj" },
+    entries: [],
+  });
+  const bridge = new ElectronPlatformBridge(host);
+  await bridge.pickFolder();
+  await bridge.scanFileObjects([]); // scenario/sample load replaces the project
+  await assert.rejects(() => bridge.applyChanges([], {}), /natively-opened/);
 });

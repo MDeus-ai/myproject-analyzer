@@ -27,6 +27,7 @@ import {
   Loader2,
   GitBranch,
   ShieldCheck,
+  HardDrive,
 } from "lucide-react";
 import { ProcessedFile } from "@myproject/core/types";
 import {
@@ -50,10 +51,15 @@ import {
   SmartPasteParseResult,
   SmartPasteChange,
 } from "@myproject/core/smartPaste";
-import { verifySmartPaste, VerifyReport } from "@myproject/core/smartPasteVerify";
+import {
+  verifySmartPaste,
+  VerifyReport,
+} from "@myproject/core/smartPasteVerify";
 import { estimateTokens } from "@myproject/core/codeAnalyzer";
 import { copyToClipboard } from "@myproject/core/clipboard";
 import { triggerFileDownload } from "@myproject/core/zipExporter";
+import { getPlatform } from "@myproject/platform";
+import type { ApplyResult } from "@myproject/platform";
 import { SmartPasteDiffPreview } from "./SmartPasteDiffPreview";
 
 interface DepLenzViewProps {
@@ -70,6 +76,19 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
   // 1. Static AST-like Analysis
   const analysis = useMemo(() => {
     return buildCodebaseDependencyGraph(files);
+  }, [files]);
+
+  // Apply-to-disk is a desktop capability AND requires a path-backed
+  // (natively opened) project — sample/drag-drop projects have no disk target.
+  const canApplyToDisk = useMemo(() => {
+    try {
+      return (
+        getPlatform().capabilities.applyToDisk &&
+        files.some((f) => f.source?.kind === "path")
+      );
+    } catch {
+      return false;
+    }
   }, [files]);
 
   // Distinct folders from files
@@ -121,6 +140,12 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
   const [copiedSmartPath, setCopiedSmartPath] = useState<string | null>(null);
   const [isZippingSmartPaste, setIsZippingSmartPaste] = useState(false);
 
+  // Apply-to-disk (Phase 3, desktop only)
+  const [isApplying, setIsApplying] = useState(false);
+  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+  const [applyDryRun, setApplyDryRun] = useState(false);
+  const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+
   // Two-step plan mode (2c)
   const [planMode, setPlanMode] = useState<boolean>(false);
   const [planInput, setPlanInput] = useState<string>("");
@@ -146,6 +171,8 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
     setPlanInput("");
     setPlannedResult(null);
     setVerifyReport(null);
+    setApplyResult(null);
+    setShowApplyConfirm(false);
     setMobilePane("list");
   }, [analysis]);
 
@@ -394,6 +421,45 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
       setIsZippingSmartPaste(false);
     }
   }, [smartPasteResult, smartPasteMarkers, surgicalBundle]);
+
+  /* ---- Apply-to-disk (Phase 3) ---- */
+
+  const handleApplyToDisk = useCallback(
+    async (force: boolean) => {
+      if (!smartPasteResult || smartPasteResult.changes.length === 0) return;
+      const platform = getPlatform();
+      if (!platform.applyChanges) return;
+      setIsApplying(true);
+      setApplyResult(null);
+      setShowApplyConfirm(false);
+      try {
+        const result = await platform.applyChanges(smartPasteResult.changes, {
+          dryRun: applyDryRun,
+          stripMarkers: !smartPasteMarkers,
+          force,
+        });
+        setApplyResult(result);
+      } catch (err) {
+        setApplyResult({
+          ok: false,
+          files: [],
+          errors: [err instanceof Error ? err.message : String(err)],
+        });
+      } finally {
+        setIsApplying(false);
+      }
+    },
+    [smartPasteResult, applyDryRun, smartPasteMarkers],
+  );
+
+  /** Errors block by default; the only way past is the force-confirm dialog. */
+  const handleApplyClick = useCallback(() => {
+    if ((verifyReport?.errorCount ?? 0) > 0) {
+      setShowApplyConfirm(true);
+    } else {
+      void handleApplyToDisk(false);
+    }
+  }, [verifyReport, handleApplyToDisk]);
 
   // Helper to open file preview modal.
   //
@@ -1451,22 +1517,70 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                     )}
                   </div>
                   {smartPasteResult && smartPasteResult.changes.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleSmartPasteZip}
-                      disabled={isZippingSmartPaste}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium cursor-pointer shadow-sm transition-colors disabled:opacity-50"
-                      title="Download all changed files as a ZIP preserving folder structure"
-                    >
-                      {isZippingSmartPaste ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <FileArchive className="w-3.5 h-3.5" />
+                    <div className="flex items-center gap-2">
+                      {canApplyToDisk && (
+                        <>
+                          <label
+                            className="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer select-none"
+                            title="Plan only — list what would be written without touching the disk"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={applyDryRun}
+                              onChange={(e) => setApplyDryRun(e.target.checked)}
+                              className="rounded border-slate-700 bg-transparent text-emerald-500 focus:ring-0 cursor-pointer"
+                            />
+                            <span>Dry run</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handleApplyClick}
+                            disabled={isApplying}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-medium cursor-pointer shadow-sm transition-colors disabled:opacity-50 ${
+                              (verifyReport?.errorCount ?? 0) > 0
+                                ? "bg-rose-600 hover:bg-rose-500"
+                                : "bg-emerald-600 hover:bg-emerald-500"
+                            }`}
+                            title={
+                              (verifyReport?.errorCount ?? 0) > 0
+                                ? "Verification errors exist — applying requires explicit confirmation"
+                                : "Write these changes to the real files (backups created first)"
+                            }
+                          >
+                            {isApplying ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <HardDrive className="w-3.5 h-3.5" />
+                            )}
+                            <span>
+                              {isApplying
+                                ? "Applying…"
+                                : applyDryRun
+                                  ? "Preview apply"
+                                  : (verifyReport?.errorCount ?? 0) > 0
+                                    ? "Apply anyway…"
+                                    : "Apply to disk"}
+                            </span>
+                          </button>
+                        </>
                       )}
-                      <span>
-                        {isZippingSmartPaste ? "Bundling…" : "Export ZIP"}
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={handleSmartPasteZip}
+                        disabled={isZippingSmartPaste}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium cursor-pointer shadow-sm transition-colors disabled:opacity-50"
+                        title="Download all changed files as a ZIP preserving folder structure"
+                      >
+                        {isZippingSmartPaste ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <FileArchive className="w-3.5 h-3.5" />
+                        )}
+                        <span>
+                          {isZippingSmartPaste ? "Bundling…" : "Export ZIP"}
+                        </span>
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -1487,8 +1601,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                     setSmartPasteInput(e.target.value);
                     if (smartPasteResult) setSmartPasteResult(null);
                     if (verifyReport) setVerifyReport(null);
-                    if (smartPasteResult) setSmartPasteResult(null);
-                    if (verifyReport) setVerifyReport(null);
+                    if (applyResult) setApplyResult(null);
                     setExpandedDiffPath(null);
                   }}
                   placeholder={`Paste the LLM response here — expecting ${SMART_PASTE_FILE_OPEN} path="..." action="modify">>> blocks…`}
@@ -1507,6 +1620,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                         onClick={() => {
                           setSmartPasteResult(null);
                           setVerifyReport(null);
+                          setApplyResult(null);
                           setSmartPasteInput("");
                         }}
                         className="px-3 py-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-white text-xs cursor-pointer"
@@ -1615,6 +1729,88 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                     <p className="text-[10px] text-slate-500">
                       {verifyReport.summary}
                     </p>
+                  </div>
+                )}
+
+                {/* Apply-to-disk result — dry-run plan or write report */}
+                {applyResult && (
+                  <div
+                    className={`p-3.5 rounded-xl border space-y-2 text-[11px] ${
+                      applyResult.ok
+                        ? "bg-ok-soft border-ok"
+                        : "bg-danger-soft border-danger"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-xs text-slate-100 flex items-center gap-1.5">
+                        <HardDrive className="w-4 h-4" />
+                        {applyDryRun
+                          ? "Dry run — nothing was written to disk"
+                          : applyResult.ok
+                            ? "Applied to disk"
+                            : "Apply finished with errors"}
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">
+                        {applyResult.files.length} file
+                        {applyResult.files.length !== 1 ? "s" : ""} ·{" "}
+                        {applyResult.errors.length} errors
+                      </span>
+                    </div>
+
+                    {applyResult.backupDir && (
+                      <p className="text-slate-300">
+                        Originals backed up to:{" "}
+                        <span className="font-mono text-slate-200 break-all">
+                          {applyResult.backupDir}
+                        </span>
+                      </p>
+                    )}
+
+                    <ul className="space-y-0.5 font-mono text-[10px] max-h-40 overflow-y-auto pr-1">
+                      {applyResult.files.map((f) => (
+                        <li key={f.path} className="flex items-start gap-1.5">
+                          <span
+                            className={`shrink-0 px-1.5 py-0.5 rounded border uppercase font-bold text-[9px] ${
+                              f.action === "created"
+                                ? "bg-ok-soft text-ok border-ok"
+                                : f.action === "deleted"
+                                  ? "bg-danger-soft text-danger border-danger"
+                                  : f.action === "modified"
+                                    ? "bg-info-soft text-info border-info"
+                                    : "surface-raised text-slate-400 border-subtle"
+                            }`}
+                          >
+                            {applyDryRun && f.action !== "skipped"
+                              ? `would ${f.action === "modified" ? "modify" : f.action}`
+                              : f.action}
+                          </span>
+                          <span className="text-slate-300 break-all">
+                            {f.path}
+                            {f.reason && (
+                              <span className="text-slate-500">
+                                {" "}
+                                — {f.reason}
+                              </span>
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {applyResult.errors.length > 0 && (
+                      <ul className="space-y-0.5 text-[10px] text-danger">
+                        {applyResult.errors.map((e, i) => (
+                          <li key={i}>• {e}</li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {!applyDryRun && applyResult.ok && (
+                      <p className="text-[10px] text-slate-500">
+                        Live watch detected the writes — all views refreshed
+                        automatically.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -1787,6 +1983,45 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
           )}
         </main>
       </div>
+
+      {/* Force-apply confirmation — the ONLY way past verification errors */}
+      {showApplyConfirm && verifyReport && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="surface-card border border-danger rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">
+                  Apply despite {verifyReport.errorCount} verification error
+                  {verifyReport.errorCount !== 1 ? "s" : ""}?
+                </h3>
+                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                  The 5-stage verifier found breaking issues (truncation,
+                  dropped exports, unresolved imports, or callers that were not
+                  updated). Writing these files may break compilation. Every
+                  overwritten file is backed up first.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowApplyConfirm(false)}
+                className="px-4 py-1.5 rounded-lg surface-raised border border-chrome text-slate-300 hover:text-white text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleApplyToDisk(true)}
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow-sm"
+              >
+                Force apply anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Syntax Diagnostics Review Modal */}
       {showDiagnosticsModal && (

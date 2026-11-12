@@ -121,4 +121,10 @@ export interface FolderScanResult {
    * see — and optionally re-include — every single removal.
    */
   gitignoreRemovedFiles?: { file: ProcessedFile; pattern: string }[];
+  /**
+   * Absolute path of the scanned root — set ONLY by native desktop scans
+   * (path-backed files). Absent for web/drag-drop imports. The renderer
+   * uses it to start a live watch session (Phase 2).
+   */
+  rootAbsolutePath?: string;
 }

@@ -6,11 +6,18 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { DesktopIpc } from "@myproject/platform/bridge";
 import type {
+  ApplyChangeIpcFile,
+  ApplyChangesIpcOptions,
+  ApplyChangesIpcResult,
   DesktopHostBridge,
   PickFolderIpcResult,
   SaveFileIpcResult,
+  StartWatchIpcOptions,
+  StartWatchIpcResult,
+  StopWatchIpcResult,
   WalkFolderIpcResult,
 } from "@myproject/platform/bridge";
+import type { WatchEventBatch } from "@myproject/platform/types";
 
 const bridge: DesktopHostBridge = {
   platform: "electron",
@@ -38,6 +45,29 @@ const bridge: DesktopHostBridge = {
   ): Promise<SaveFileIpcResult> =>
     ipcRenderer.invoke(DesktopIpc.saveFile, suggestedName, data),
 
+  startWatch: (
+    rootPath: string,
+    opts: StartWatchIpcOptions,
+  ): Promise<StartWatchIpcResult> =>
+    ipcRenderer.invoke(DesktopIpc.startWatch, rootPath, opts),
+
+  stopWatch: (sessionId: string): Promise<StopWatchIpcResult> =>
+    ipcRenderer.invoke(DesktopIpc.stopWatch, sessionId),
+
+  onWatchEvent: (cb: (batch: WatchEventBatch) => void): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      batch: WatchEventBatch,
+    ): void => cb(batch);
+    ipcRenderer.on(DesktopIpc.watchEvent, listener);
+    return () => ipcRenderer.removeListener(DesktopIpc.watchEvent, listener);
+  },
+  applyChanges: (
+    rootPath: string,
+    changes: ApplyChangeIpcFile[],
+    opts: ApplyChangesIpcOptions,
+  ): Promise<ApplyChangesIpcResult> =>
+    ipcRenderer.invoke(DesktopIpc.applyChanges, rootPath, changes, opts),
   getPathForFile: (file: File): string => {
     try {
       return webUtils.getPathForFile(file);

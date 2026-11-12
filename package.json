@@ -13,6 +13,7 @@
     "test": "npm run test --workspace=@myproject/core",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
+    "dist:desktop": "npm run dist -w @myproject/desktop",
     "dev:desktop": "concurrently -k \"npm run dev\" \"wait-on http://localhost:3000 && npm run start -w @myproject/desktop\""
   },
   "devDependencies": {

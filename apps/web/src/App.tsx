@@ -45,7 +45,10 @@ import {
 } from "@myproject/core/sampleProject";
 import { processFileList, ScanProgress } from "@myproject/core/folderReader";
 import { isSecretFile } from "@myproject/core/secretsDetector";
+import { DEFAULT_EXCLUSION_RULES } from "@myproject/core/folderExclusions";
+import { getFileExtension } from "@myproject/core/fileHelpers";
 import { getPlatform } from "@myproject/platform";
+import type { WatchEventBatch } from "@myproject/platform";
 import { ShieldAlert, ArrowRight, CheckCircle2, X } from "lucide-react";
 
 interface ImportToast {
@@ -90,6 +93,13 @@ export default function App() {
   // Zipping progress
   const [isZipping, setIsZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState<ZipProgress | undefined>();
+
+  // ---- Live watch (desktop only, capabilities.watch) ----
+  const watchSessionRef = useRef<string | null>(null);
+  const watchUnsubRef = useRef<(() => void) | null>(null);
+  const watchRootRef = useRef<{ abs: string; name: string } | null>(null);
+  const [isWatching, setIsWatching] = useState(false);
+  const [watchNotice, setWatchNotice] = useState<string | null>(null);
 
   // Hidden folder input ref
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +157,163 @@ export default function App() {
     [],
   );
 
+  // ------------------------------------------------------------------
+  // Live watch (Phase 2). Only active after a NATIVE import — web and
+  // drag-drop scans carry no rootAbsolutePath, so this is a no-op there.
+  // ------------------------------------------------------------------
+
+  // Auto-dismiss the "files changed on disk" notice
+  useEffect(() => {
+    if (!watchNotice) return;
+    const timer = setTimeout(() => setWatchNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [watchNotice]);
+
+  const handleWatchBatch = useCallback(async (batch: WatchEventBatch) => {
+    // Stale batches from a previous session must never touch the new project.
+    if (watchSessionRef.current !== batch.sessionId) return;
+    const ctx = watchRootRef.current;
+    if (!ctx) return;
+
+    // addDir/unlinkDir are ignored — files inside emit their own events.
+    const fileEvents = batch.events.filter(
+      (e) => e.type !== "addDir" && e.type !== "unlinkDir",
+    );
+    if (fileEvents.length === 0) return;
+
+    const platform = getPlatform();
+
+    // 1. Read fresh content for added/changed files through the platform
+    //    channel (gated: size cap + binary sniff, same as the scan).
+    const freshFiles: ProcessedFile[] = [];
+    for (const e of fileEvents) {
+      if (e.type === "unlink") continue;
+      const rel = `${ctx.name}/${e.path}`;
+      const segs = rel.split("/");
+      const name = segs[segs.length - 1] ?? e.path;
+      const file: ProcessedFile = {
+        id: `watch-${rel}-${e.mtimeMs ?? Date.now()}`,
+        name,
+        originalName: name,
+        flattenedName: name,
+        relativePath: rel,
+        pathSegments: segs,
+        directoryPath: segs.length > 2 ? segs.slice(1, -1).join("/") : "",
+        size: e.size ?? 0,
+        type: "",
+        extension: getFileExtension(name),
+        lastModified: e.mtimeMs ?? Date.now(),
+        source: {
+          kind: "path",
+          absolutePath: `${ctx.abs.replace(/[\\/]+$/, "")}/${e.path}`,
+        },
+      };
+      const text = await platform.readText(file);
+      if (text !== undefined) file.textContent = text;
+      freshFiles.push(file);
+    }
+
+    const removedRels = new Set(
+      fileEvents
+        .filter((e) => e.type === "unlink")
+        .map((e) => `${ctx.name}/${e.path}`),
+    );
+
+    // 2. One atomic state update: drop removed + replaced, append fresh.
+    //    New object identities guarantee the useMemo chains (tree, stats,
+    //    collisions, DepLenz graph) recompute.
+    setRawFiles((prev) => {
+      if (freshFiles.length === 0 && removedRels.size === 0) return prev;
+      const freshByRel = new Map(freshFiles.map((f) => [f.relativePath, f]));
+      const kept = prev.filter(
+        (f) =>
+          !removedRels.has(f.relativePath) && !freshByRel.has(f.relativePath),
+      );
+      return [...kept, ...freshFiles];
+    });
+
+    // 3. Keep the secrets banner honest for newly appeared secret files.
+    if (freshFiles.some((f) => isSecretFile(f.name))) {
+      setDetectedSecretFiles((prev) => {
+        const next = new Set(prev);
+        for (const f of freshFiles) {
+          if (isSecretFile(f.name)) next.add(f.relativePath);
+        }
+        return [...next];
+      });
+    }
+
+    const changed = freshFiles.length + removedRels.size;
+    setWatchNotice(
+      `${changed} file${changed === 1 ? "" : "s"} updated on disk — views refreshed`,
+    );
+  }, []);
+
+  const stopWatching = useCallback(async () => {
+    watchUnsubRef.current?.();
+    watchUnsubRef.current = null;
+    watchRootRef.current = null;
+    const platform = getPlatform();
+    const sessionId = watchSessionRef.current;
+    watchSessionRef.current = null;
+    setIsWatching(false);
+    if (sessionId && platform.stopWatch) {
+      try {
+        await platform.stopWatch(sessionId);
+      } catch {
+        // session already gone (window closed) — fine
+      }
+    }
+  }, []);
+
+  const startWatching = useCallback(
+    async (rootAbsolutePath: string, rootName: string) => {
+      const platform = getPlatform();
+      if (
+        !platform.capabilities.watch ||
+        !platform.startWatch ||
+        !platform.onWatchEvent
+      ) {
+        return;
+      }
+      await stopWatching();
+      try {
+        const sessionId = await platform.startWatch(rootAbsolutePath, {
+          excludedPatterns: DEFAULT_EXCLUSION_RULES.filter(
+            (r) => r.isDefault,
+          ).map((r) => r.pattern),
+          respectGitignore: true,
+        });
+        watchSessionRef.current = sessionId;
+        watchRootRef.current = { abs: rootAbsolutePath, name: rootName };
+        watchUnsubRef.current = platform.onWatchEvent(handleWatchBatch);
+        setIsWatching(true);
+      } catch (err) {
+        console.error("[watch] failed to start:", err);
+      }
+    },
+    [stopWatching, handleWatchBatch],
+  );
+
+  /** Native scan → watch it. Web/drag-drop scan → kill any stale watcher. */
+  const maybeStartWatch = useCallback(
+    (scan: FolderScanResult) => {
+      if (scan.rootAbsolutePath) {
+        void startWatching(scan.rootAbsolutePath, scan.rootName);
+      } else {
+        void stopWatching();
+      }
+    },
+    [startWatching, stopWatching],
+  );
+
+  // Stop the watcher when the app unmounts.
+  useEffect(() => {
+    return () => {
+      void stopWatching();
+    };
+  }, [stopWatching]);
+
   // Intercept incoming scans before importing.
   //
   // Nothing is excluded silently: the review modal opens whenever ANYTHING
@@ -170,9 +337,10 @@ export default function App() {
         setExcludedFolders([]);
         setGitignoreExcludedCount(0);
         handleFilesLoaded(scanResult.files, scanResult.rootName, 0);
+        maybeStartWatch(scanResult);
       }
     },
-    [handleFilesLoaded],
+    [handleFilesLoaded, maybeStartWatch],
   );
 
   // Open Folder routes through the platform bridge: native dialog + native
@@ -212,10 +380,11 @@ export default function App() {
           pendingScanResult.rootName,
           gitignoreCount,
         );
+        maybeStartWatch(pendingScanResult);
       }
       setIsExclusionModalOpen(false);
     },
-    [handleFilesLoaded, pendingScanResult],
+    [handleFilesLoaded, pendingScanResult, maybeStartWatch],
   );
 
   // Cancel review modal
@@ -633,6 +802,26 @@ export default function App() {
 
       {/* Global import progress overlay */}
       {importProgress && <ImportProgressOverlay progress={importProgress} />}
+
+      {/* Live-watch status pill (desktop) */}
+      {isWatching && (
+        <div className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-5 z-40 flex items-center space-x-2 px-3 py-2 rounded-xl surface-card border border-chrome shadow-2xl text-xs text-slate-300">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>
+            Live — watching{" "}
+            <span className="font-mono text-slate-100">{rootFolderName}</span>{" "}
+            for changes
+          </span>
+        </div>
+      )}
+
+      {/* Watch change notice */}
+      {watchNotice && (
+        <div className="fixed bottom-[max(4.75rem,calc(env(safe-area-inset-bottom)+3.5rem))] left-5 z-40 flex items-center space-x-2 px-3 py-2 rounded-xl surface-card border border-chrome shadow-2xl text-xs text-slate-300">
+          <span className="w-2 h-2 rounded-full bg-cyan-400" />
+          <span>{watchNotice}</span>
+        </div>
+      )}
 
       {/* Import success toast */}
       {importToast && !importProgress && (
