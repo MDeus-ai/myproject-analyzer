@@ -589,7 +589,23 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
   const effNodesRef = useRef(effNodes);
   effNodesRef.current = effNodes;
 
-  // Reset transient interaction state when the graph shape changes.
+  // ------------------------------------------------------------------
+  // Stable fingerprint of the node SET. Analysis rebuilds that produce
+  // the same nodes (live-watch reparses, engine swaps) must NOT reset
+  // the camera, selection, or interaction state — only an actual change
+  // in which nodes exist (project load, folder/kind filter, trim set)
+  // may do that. Was: everything keyed on [layout], which is a fresh
+  // object after every analysis, so every disk save yanked the camera
+  // back to "fit" and cleared the traced selection.
+  // ------------------------------------------------------------------
+  const structureKey = useMemo(() => {
+    const ids = layout.nodes.map((n) => n.id).sort();
+    return `${folder}|${kind}|${includePackages}|${ids.join(",")}`;
+  }, [layout, folder, kind, includePackages]);
+
+  const fittedKeyRef = useRef<string | null>(null);
+
+  // Reset transient interaction state only when the graph SHAPE changes.
   useEffect(() => {
     setHoverId(null);
     setMapSelectedId(null);
@@ -597,7 +613,7 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     nodeDragRef.current = null;
     activePointersRef.current.clear();
     pinchRef.current = null;
-  }, [layout]);
+  }, [structureKey]);
 
   /* ----- camera helpers ---------------------------------------------- */
 
@@ -629,9 +645,10 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
     });
   }, []);
 
-  // Fit whenever a new layout appears (project/filter change).
+  // Fit only when the node set changes; same-set rebuilds keep the camera.
   useEffect(() => {
-    // Prune manual positions whose node no longer exists.
+    // Prune manual positions whose node no longer exists (cheap — safe to
+    // run on every layout).
     setPositions((prev) => {
       const ids = Object.keys(prev);
       const next: Record<string, XY> = {};
@@ -642,9 +659,12 @@ export const DepLenzGraphCanvas: React.FC<DepLenzGraphCanvasProps> = ({
       }
       return changed ? next : prev;
     });
+
+    if (fittedKeyRef.current === structureKey) return;
+    fittedKeyRef.current = structureKey;
     const raf = requestAnimationFrame(fitView);
     return () => cancelAnimationFrame(raf);
-  }, [layout, fitView]);
+  }, [structureKey, fitView]);
 
   const zoomAtPoint = useCallback(
     (clientX: number, clientY: number, delta: number) => {

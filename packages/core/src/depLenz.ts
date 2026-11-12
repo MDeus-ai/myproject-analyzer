@@ -13,6 +13,7 @@
  */
 
 import { ProcessedFile } from "@myproject/core/types";
+import { getDepLenzEngine } from "@myproject/core/engineBridge";
 
 export type SymbolKind = "function" | "component" | "hook" | "method" | "class";
 
@@ -2126,4 +2127,42 @@ export function buildPlannedContext(
     estimatedTokens: Math.ceil(prompt.length / 3.8),
     characterCount: prompt.length,
   };
+}
+/* ------------------------------------------------------------------ */
+/* Async variants — the UI-facing entry points.                        */
+/*                                                                     */
+/* They consult the registered DepLenzEngine (native Rust engine on    */
+/* desktop — see engineBridge.ts) and fall back to the synchronous     */
+/* TypeScript implementation above when no engine is registered or the */
+/* engine declines the file set. The sync functions remain the spec.   */
+/* ------------------------------------------------------------------ */
+
+export async function buildCodebaseDependencyGraphAsync(
+  files: ProcessedFile[],
+): Promise<DepLenzAnalysisResult> {
+  try {
+    const engine = getDepLenzEngine();
+    const result = engine ? await engine.buildGraph(files) : null;
+    if (result) return result;
+  } catch (err) {
+    console.warn("[deplenz] native engine failed, using TS engine:", err);
+  }
+  return buildCodebaseDependencyGraph(files);
+}
+
+export async function searchCodebaseAsync(
+  files: ProcessedFile[],
+  options: CodebaseSearchOptions,
+  symbolsMap?: Map<string, DepLenzSymbol[]>,
+): Promise<CodebaseSearchMatch[]> {
+  try {
+    const engine = getDepLenzEngine();
+    const result = engine
+      ? await engine.search(files, options, symbolsMap)
+      : null;
+    if (result) return result;
+  } catch {
+    // fall through to the TS engine
+  }
+  return searchCodebase(files, options, symbolsMap);
 }

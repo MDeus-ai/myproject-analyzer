@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Folder,
   FolderOpen,
@@ -24,13 +24,42 @@ interface DirectoryTreeViewProps {
   onSelectFile: (file: ProcessedFile) => void;
 }
 
+/**
+ * Collapse everything at or below `expandDepth`; the root and its first
+ * level stay open. Mounting the ENTIRE tree expanded (the old behavior)
+ * meant thousands of DOM rows on every project load and every tree rebuild
+ * under live watch.
+ */
+function computeInitialCollapsed(
+  root: FolderNode,
+  expandDepth: number,
+): Set<string> {
+  const collapsed = new Set<string>();
+  const walk = (node: FolderNode) => {
+    if (node.depth >= expandDepth && node.subfolders.size > 0) {
+      collapsed.add(node.relativePath);
+    }
+    node.subfolders.forEach(walk);
+  };
+  walk(root);
+  return collapsed;
+}
+
 export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
   rootNode,
   onSelectFile,
 }) => {
-  const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
+  const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(() =>
+    computeInitialCollapsed(rootNode, 2),
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedTree, setCopiedTree] = useState(false);
+
+  // New project / rebuilt tree → reset to the default expansion and drop
+  // stale paths from the previous project.
+  useEffect(() => {
+    setCollapsedPaths(computeInitialCollapsed(rootNode, 2));
+  }, [rootNode]);
 
   const toggleFolder = (path: string) => {
     const next = new Set(collapsedPaths);
@@ -75,7 +104,8 @@ export const DirectoryTreeView: React.FC<DirectoryTreeViewProps> = ({
   };
 
   const renderNode = (node: FolderNode, level: number = 0): React.ReactNode => {
-    const isCollapsed = collapsedPaths.has(node.relativePath);
+    // While searching, ignore the collapsed state so matches are visible.
+    const isCollapsed = !searchQuery && collapsedPaths.has(node.relativePath);
     const subfolderEntries = Array.from(node.subfolders.entries()).sort(
       ([a], [b]) => a.localeCompare(b),
     );

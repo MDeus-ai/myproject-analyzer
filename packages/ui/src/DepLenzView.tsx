@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import {
   Search,
   Network,
@@ -31,14 +37,17 @@ import {
 } from "lucide-react";
 import { ProcessedFile } from "@myproject/core/types";
 import {
-  buildCodebaseDependencyGraph,
-  searchCodebase,
+  buildCodebaseDependencyGraphAsync,
+  searchCodebaseAsync,
   extractSurgicalContext,
   buildPlanPrompt,
   parsePlanResponse,
   buildPlannedContext,
+  isCodeFile,
   SymbolKind,
   DepLenzGraphNode,
+  DepLenzAnalysisResult,
+  CodebaseSearchMatch,
   PlannedContextResult,
 } from "@myproject/core/depLenz";
 import { DepLenzGraphCanvas } from "./DepLenzGraphCanvas";
@@ -61,6 +70,8 @@ import { triggerFileDownload } from "@myproject/core/zipExporter";
 import { getPlatform } from "@myproject/platform";
 import type { ApplyResult } from "@myproject/platform";
 import { SmartPasteDiffPreview } from "./SmartPasteDiffPreview";
+import { useDebouncedValue } from "./useDebouncedValue";
+import { useVirtualRows } from "./useVirtualRows";
 
 interface DepLenzViewProps {
   files: ProcessedFile[];
@@ -69,14 +80,79 @@ interface DepLenzViewProps {
 
 type SubViewMode = "graph" | "map" | "search" | "surgical";
 
+/** Shown while the first async analysis is in flight. */
+const EMPTY_ANALYSIS: DepLenzAnalysisResult = {
+  symbols: [],
+  nodesMap: new Map(),
+  fileSymbolsMap: new Map(),
+  fileTypesMap: new Map(),
+  typeIndex: new Map(),
+  totalFunctions: 0,
+  totalComponents: 0,
+  totalHooks: 0,
+  totalDependenciesMapped: 0,
+  analyzedFilesCount: 0,
+  diagnostics: [],
+  totalSyntaxWarnings: 0,
+  filesWithSyntaxErrors: [],
+};
+
+/** Row height of a symbol-directory entry (p-3 + badge/name/path/signature). */
+const SYM_ROW_H = 78;
+
 export const DepLenzView: React.FC<DepLenzViewProps> = ({
   files,
   onSelectFile,
 }) => {
-  // 1. Static AST-like Analysis
-  const analysis = useMemo(() => {
-    return buildCodebaseDependencyGraph(files);
-  }, [files]);
+  // ------------------------------------------------------------------
+  // 1. Analysis — async, debounced, and fingerprinted.
+  //
+  // Was: useMemo(buildCodebaseDependencyGraph(files), [files]) — a full
+  // re-parse of every code file on the UI thread for EVERY live-watch
+  // batch (~150ms cadence while editing in an external editor).
+  //
+  // Now: 350ms debounce collapses watch bursts into one rebuild; the
+  // fingerprint ignores changes to non-code files entirely; the build
+  // goes through the async engine seam (native engine on desktop, TS
+  // fallback elsewhere); and the previous analysis stays on screen while
+  // the new one builds, so the view never blanks or resets mid-edit.
+  // ------------------------------------------------------------------
+  const debouncedFiles = useDebouncedValue(files, 350);
+
+  // Only code files influence the graph — css/json/asset churn is ignored.
+  const codeFingerprint = useMemo(
+    () =>
+      debouncedFiles
+        .filter(isCodeFile)
+        .map(
+          (f) =>
+            `${f.relativePath}:${f.size}:${f.lastModified}:${f.textContent?.length ?? 0}`,
+        )
+        .join("|"),
+    [debouncedFiles],
+  );
+
+  const [analysisResult, setAnalysisResult] =
+    useState<DepLenzAnalysisResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(true);
+  const analysisSeq = useRef(0);
+
+  useEffect(() => {
+    const seq = ++analysisSeq.current;
+    setIsAnalyzing(true);
+    void buildCodebaseDependencyGraphAsync(debouncedFiles).then((r) => {
+      if (analysisSeq.current === seq) {
+        setAnalysisResult(r);
+        setIsAnalyzing(false);
+      }
+    });
+    // debouncedFiles is the value that produced codeFingerprint in the same
+    // render — keying on the fingerprint avoids rebuilding when only
+    // non-code files changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codeFingerprint]);
+
+  const analysis = analysisResult ?? EMPTY_ANALYSIS;
 
   // Apply-to-disk is a desktop capability AND requires a path-backed
   // (natively opened) project — sample/drag-drop projects have no disk target.
@@ -114,9 +190,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
   const [symbolFilterText, setSymbolFilterText] = useState<string>("");
 
   // Target Symbol State
-  const [selectedSymbolId, setSelectedSymbolId] = useState<string>(() => {
-    return analysis.symbols.length > 0 ? analysis.symbols[0].id : "";
-  });
+  const [selectedSymbolId, setSelectedSymbolId] = useState<string>("");
   const [navHistory, setNavHistory] = useState<string[]>([]);
 
   // Search State
@@ -157,24 +231,36 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
   const [verifyReport, setVerifyReport] = useState<VerifyReport | null>(null);
   const [expandedDiffPath, setExpandedDiffPath] = useState<string | null>(null);
 
-  // Reset selection & navigation when a different project is loaded while
-  // this view is mounted — otherwise stale symbol ids (and a stale history
-  // stack) from the previous project linger.
+  // Keep the focused symbol across analysis rebuilds (watch reparses almost
+  // always preserve it — symbol ids are stable path:name pairs). Only fall
+  // back to the first symbol when the current one genuinely vanished.
   useEffect(() => {
-    setSelectedSymbolId(
-      analysis.symbols.length > 0 ? analysis.symbols[0].id : "",
+    setSelectedSymbolId((prev) =>
+      prev && analysis.nodesMap.has(prev)
+        ? prev
+        : analysis.symbols.length > 0
+          ? analysis.symbols[0].id
+          : "",
     );
+  }, [analysis]);
+
+  // Full state clear ONLY when a different project is loaded (identified by
+  // the common root path segment). Was: keyed on [analysis], which under
+  // live watch wiped the Smart Paste Inbox, plan state and navigation
+  // history on every disk save.
+  const rootKey = files[0]?.pathSegments?.[0] ?? "";
+  useEffect(() => {
     setNavHistory([]);
     setSmartPasteInput("");
     setSmartPasteResult(null);
-    setExpandedDiffPath(null);
-    setPlanInput("");
-    setPlannedResult(null);
     setVerifyReport(null);
     setApplyResult(null);
     setShowApplyConfirm(false);
+    setPlanInput("");
+    setPlannedResult(null);
+    setExpandedDiffPath(null);
     setMobilePane("list");
-  }, [analysis]);
+  }, [rootKey]);
 
   // Update selected symbol safely if current selection is invalid
   const activeNode: DepLenzGraphNode | undefined = useMemo(() => {
@@ -248,28 +334,59 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
     return list;
   }, [analysis.symbols, selectedFolder, selectedKind, symbolFilterText]);
 
-  // Keyword Search Matches
-  const searchMatches = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    return searchCodebase(
+  // Virtualized symbol directory — large codebases have thousands of symbols.
+  const {
+    ref: symListRef,
+    start: symStart,
+    end: symEnd,
+    padTop: symPadTop,
+    padBottom: symPadBottom,
+    onScroll: onSymListScroll,
+  } = useVirtualRows(filteredSymbols.length, SYM_ROW_H);
+
+  // Reset scroll when the directory filter set changes.
+  useEffect(() => {
+    symListRef.current?.scrollTo({ top: 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFolder, selectedKind, symbolFilterText]);
+
+  // ------------------------------------------------------------------
+  // Keyword Search — debounced + async (was: synchronous useMemo scanning
+  // every file's content on each keystroke).
+  // ------------------------------------------------------------------
+  const debouncedQuery = useDebouncedValue(searchQuery, 150);
+  const [searchMatches, setSearchMatches] = useState<CodebaseSearchMatch[]>([]);
+
+  useEffect(() => {
+    if (!debouncedQuery.trim()) {
+      setSearchMatches([]);
+      return;
+    }
+    let live = true;
+    void searchCodebaseAsync(
       files,
       {
-        query: searchQuery,
+        query: debouncedQuery,
         caseSensitive,
         wholeWord,
         isRegex,
         fileFilter: searchPathFilter,
       },
       analysis.fileSymbolsMap,
-    );
+    ).then((r) => {
+      if (live) setSearchMatches(r);
+    });
+    return () => {
+      live = false;
+    };
   }, [
-    files,
-    searchQuery,
+    debouncedQuery,
     caseSensitive,
     wholeWord,
     isRegex,
     searchPathFilter,
-    analysis.fileSymbolsMap,
+    files,
+    analysis,
   ]);
 
   // Surgical Prompt Context Bundle — 2b: receives the files so the complete
@@ -520,6 +637,15 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
 
         {/* Quick Metrics Bar */}
         <div className="flex items-center gap-2 sm:gap-4 text-xs text-slate-300">
+          {isAnalyzing && (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md surface-card border border-subtle text-slate-400"
+              title="Rebuilding the dependency graph"
+            >
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span className="text-[11px] hidden sm:inline">Analyzing…</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md surface-card border border-subtle">
             <Code2 className="w-3.5 h-3.5 text-sky-400" />
             <span className="font-semibold text-slate-200">
@@ -736,71 +862,87 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
             </div>
           </div>
 
-          {/* Symbol List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-[var(--border-subtle)]">
+          {/* Symbol List — virtualized: large codebases have thousands of
+              symbols; only the visible window is mounted. */}
+          <div
+            ref={symListRef}
+            onScroll={onSymListScroll}
+            className="flex-1 overflow-y-auto"
+          >
             {filteredSymbols.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-500">
                 <Code2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                No matching functions or components found.
+                {isAnalyzing
+                  ? "Analyzing codebase…"
+                  : "No matching functions or components found."}
               </div>
             ) : (
-              filteredSymbols.map((sym) => {
-                const isSelected = activeNode?.symbol.id === sym.id;
-                const node = analysis.nodesMap.get(sym.id);
-                const impact = node ? node.impactLevel : "low";
-                const totalDeps = node
-                  ? node.dependencies.length + node.dependents.length
-                  : 0;
+              <>
+                {symPadTop > 0 && <div style={{ height: symPadTop }} />}
+                {filteredSymbols.slice(symStart, symEnd).map((sym) => {
+                  const isSelected = activeNode?.symbol.id === sym.id;
+                  const node = analysis.nodesMap.get(sym.id);
+                  const impact = node ? node.impactLevel : "low";
+                  const totalDeps = node
+                    ? node.dependencies.length + node.dependents.length
+                    : 0;
 
-                return (
-                  <button
-                    key={sym.id}
-                    type="button"
-                    onClick={() => handleSelectSymbol(sym.id)}
-                    className={`w-full text-left p-3 transition-colors cursor-pointer ${
-                      isSelected
-                        ? "bg-accent-soft border-l-4 border-accent"
-                        : "hover:bg-[var(--surface-hover)]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span
-                            className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border ${getKindBadgeClass(
-                              sym.kind,
-                            )}`}
-                          >
-                            {sym.kind}
-                          </span>
-                          <span className="font-semibold text-xs text-slate-200 truncate">
-                            {sym.name}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 truncate mt-0.5 font-mono">
-                          {sym.fileName}:{sym.lineStart}
-                        </div>
-                      </div>
-
-                      {/* Impact Badge */}
-                      <span
-                        className={`text-[10px] font-medium px-1.5 py-0.5 rounded border shrink-0 ${getImpactBadgeClass(
-                          impact,
-                        )}`}
-                        title={`${node?.dependents.length || 0} callers, ${
-                          node?.dependencies.length || 0
-                        } callees`}
+                  return (
+                    <div
+                      key={sym.id}
+                      style={{ height: SYM_ROW_H }}
+                      className="border-b border-subtle"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleSelectSymbol(sym.id)}
+                        className={`w-full h-full overflow-hidden text-left p-3 transition-colors cursor-pointer ${
+                          isSelected
+                            ? "bg-accent-soft border-l-4 border-accent"
+                            : "hover:bg-[var(--surface-hover)]"
+                        }`}
                       >
-                        {totalDeps} links
-                      </span>
-                    </div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border ${getKindBadgeClass(
+                                  sym.kind,
+                                )}`}
+                              >
+                                {sym.kind}
+                              </span>
+                              <span className="font-semibold text-xs text-slate-200 truncate">
+                                {sym.name}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 truncate mt-0.5 font-mono">
+                              {sym.fileName}:{sym.lineStart}
+                            </div>
+                          </div>
 
-                    <div className="mt-1 text-[10px] text-slate-500 truncate font-mono">
-                      {sym.signature}
+                          {/* Impact Badge */}
+                          <span
+                            className={`text-[10px] font-medium px-1.5 py-0.5 rounded border shrink-0 ${getImpactBadgeClass(
+                              impact,
+                            )}`}
+                            title={`${node?.dependents.length || 0} callers, ${
+                              node?.dependencies.length || 0
+                            } callees`}
+                          >
+                            {totalDeps} links
+                          </span>
+                        </div>
+
+                        <div className="mt-1 text-[10px] text-slate-500 truncate font-mono">
+                          {sym.signature}
+                        </div>
+                      </button>
                     </div>
-                  </button>
-                );
-              })
+                  );
+                })}
+                {symPadBottom > 0 && <div style={{ height: symPadBottom }} />}
+              </>
             )}
           </div>
         </aside>
@@ -1089,8 +1231,9 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
               ) : (
                 <div className="p-12 text-center text-slate-500">
                   <Code2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                  Select a function or component from the directory on the left
-                  to view its dependency tree.
+                  {isAnalyzing
+                    ? "Analyzing codebase…"
+                    : "Select a function or component from the directory on the left to view its dependency tree."}
                 </div>
               )}
             </div>
@@ -1835,7 +1978,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                       return (
                         /* Wrapper: stacks the row and its expandable diff preview */
                         <div key={change.path} className="space-y-2">
-                          {/* Row — same content as before; the key lives on the wrapper now */}
+                          {/* Row */}
                           <div className="flex items-center gap-2.5 p-2.5 rounded-xl surface-inset border border-subtle">
                             <div className="p-1.5 rounded-lg surface-raised border border-subtle shrink-0">
                               <ActionIcon className="w-3.5 h-3.5 text-slate-300" />

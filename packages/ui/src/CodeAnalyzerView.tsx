@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import {
   Code2,
   Copy,
@@ -24,8 +30,12 @@ import {
 import { formatBytes } from "@myproject/core/fileHelpers";
 import { triggerFileDownload } from "@myproject/core/zipExporter";
 import { copyToClipboard } from "@myproject/core/clipboard";
-import { isSecretFile, getSecretWarning } from "@myproject/core/secretsDetector";
+import {
+  isSecretFile,
+  getSecretWarning,
+} from "@myproject/core/secretsDetector";
 import { AnalyzerTextPreview } from "./AnalyzerTextPreview";
+import { useVirtualRows } from "./useVirtualRows";
 
 interface CodeAnalyzerViewProps {
   files: ProcessedFile[];
@@ -90,22 +100,44 @@ const FORMAT_ORDER: AnalyzerStyle[] = [
 /** Token count above which a file row is highlighted as heavy. */
 const HEAVY_FILE_TOKENS = 10_000;
 
+/** Fixed list-row height for windowing (rows truncate, so it is stable). */
+const ROW_H = 76;
+
 export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
   files,
   rootFolderName,
 }) => {
+  // Cheap per-file fields only. Line/token metrics are NOT computed here —
+  // splitting and scanning every file's content on every project change
+  // (i.e. every live-watch batch) was a major stall; they are computed
+  // lazily per rendered row via getMetrics() below.
   const analyzedFiles = useMemo(() => {
     return files.map((file) => ({
       ...file,
       meta: identifyCodeFileType(file.name),
-      lines: countLines(file.textContent || ""),
-      tokens: estimateTokens(file.textContent || ""),
       // Dependency lockfiles are technically code but huge and near-zero
       // value to an LLM — flagged in the list, deselected by default.
       isLock: isLockfile(file.name),
       locationFromRoot: getRelativePathFromRoot(file, rootFolderName),
     }));
   }, [files, rootFolderName]);
+
+  // Per-file metrics cache. Live watch only replaces CHANGED file objects
+  // (unchanged ones keep identity — see App.tsx), so cache keys stay valid
+  // for untouched files across watch batches.
+  const metricsCache = useRef(
+    new Map<string, { lines: number; tokens: number }>(),
+  );
+  const getMetrics = useCallback((f: ProcessedFile) => {
+    const key = `${f.id}|${f.size}|${f.lastModified}`;
+    let m = metricsCache.current.get(key);
+    if (!m) {
+      const t = f.textContent ?? "";
+      m = { lines: countLines(t), tokens: estimateTokens(t) };
+      metricsCache.current.set(key, m);
+    }
+    return m;
+  }, []);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
     const initial = new Set<string>();
@@ -145,6 +177,21 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
       return f.meta.fileType.toLowerCase() === selectedTypeFilter.toLowerCase();
     });
   }, [analyzedFiles, searchQuery, selectedTypeFilter]);
+
+  // Virtualized file list — same reasoning as FlatFilesView.
+  const {
+    ref: listRef,
+    start,
+    end,
+    padTop,
+    padBottom,
+    onScroll,
+  } = useVirtualRows(filteredFiles.length, ROW_H);
+
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, selectedTypeFilter]);
 
   const availableTypes = useMemo(() => {
     const types = new Set<string>();
@@ -222,8 +269,8 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
   }, [tokenEstimates]);
 
   const totalLines = useMemo(
-    () => selectedFiles.reduce((acc, f) => acc + f.lines, 0),
-    [selectedFiles],
+    () => selectedFiles.reduce((acc, f) => acc + getMetrics(f).lines, 0),
+    [selectedFiles, getMetrics],
   );
   const estimatedTokensCount = estimateTokens(combinedText);
 
@@ -501,100 +548,108 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
             </div>
           </div>
 
-          {/* Files List */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {filteredFiles.map((file) => {
+          {/* Files List — virtualized */}
+          <div
+            ref={listRef}
+            onScroll={onScroll}
+            className="flex-1 overflow-y-auto p-2"
+          >
+            {padTop > 0 && <div style={{ height: padTop }} />}
+            {filteredFiles.slice(start, end).map((file) => {
               const isSelected = selectedIds.has(file.id);
               const isSecret = isSecretFile(file.name);
+              const { lines, tokens } = getMetrics(file);
               return (
-                <div
-                  key={file.id}
-                  onClick={() => toggleFile(file.id)}
-                  className={`flex items-start space-x-2.5 p-2 rounded-xl cursor-pointer transition-colors border ${
-                    isSelected
-                      ? isSecret
-                        ? "bg-danger-soft border-danger"
-                        : "bg-accent-soft border-accent"
-                      : "hover:bg-[var(--surface-hover)] border-transparent"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggleFile(file.id)}
-                    aria-label={`Include ${file.name}`}
-                    className="rounded border-slate-700 bg-transparent text-cyan-500 focus:ring-0 cursor-pointer mt-1"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-xs text-slate-200 truncate font-mono">
-                        {file.name}
-                      </span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase font-bold border border-subtle ${
-                          isSecret
-                            ? "bg-danger-soft text-danger"
-                            : "surface-raised text-info"
-                        }`}
-                      >
-                        {file.meta.fileType}
-                      </span>
-                    </div>
-
-                    <p className="text-[11px] text-slate-400 font-mono truncate mt-0.5">
-                      {file.locationFromRoot}
-                    </p>
-
-                    <div className="flex items-center space-x-2 text-[10px] text-slate-500 font-mono mt-1">
-                      <span>{file.lines} lines</span>
-                      <span>•</span>
-                      <span>{formatBytes(file.size)}</span>
-                      {file.textContent != null && (
-                        <>
-                          <span>•</span>
-                          <span
-                            className={
-                              file.tokens > HEAVY_FILE_TOKENS
-                                ? "text-warn font-semibold"
-                                : ""
-                            }
-                            title="Estimated tokens for this file"
-                          >
-                            ~{file.tokens.toLocaleString()} tok
-                          </span>
-                        </>
-                      )}
-                      <span>•</span>
-                      <span className="capitalize">{file.meta.language}</span>
-                      {file.isLock && (
-                        <span className="text-warn font-semibold">
-                          • lockfile — off by default
-                        </span>
-                      )}
-                      {isSecret && (
-                        <span className="text-danger font-semibold">
-                          • secrets?
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDownloadSingleFile(file);
-                    }}
-                    className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-[var(--surface-hover)] transition-colors shrink-0"
-                    title={`Export this single file in ${FORMAT_META[formatStyle].label} format`}
+                <div key={file.id} style={{ height: ROW_H }} className="pb-1">
+                  <div
+                    onClick={() => toggleFile(file.id)}
+                    className={`h-full overflow-hidden flex items-start space-x-2.5 p-2 rounded-xl cursor-pointer transition-colors border ${
+                      isSelected
+                        ? isSecret
+                          ? "bg-danger-soft border-danger"
+                          : "bg-accent-soft border-accent"
+                        : "hover:bg-[var(--surface-hover)] border-transparent"
+                    }`}
                   >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleFile(file.id)}
+                      aria-label={`Include ${file.name}`}
+                      className="rounded border-slate-700 bg-transparent text-cyan-500 focus:ring-0 cursor-pointer mt-1"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs text-slate-200 truncate font-mono">
+                          {file.name}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase font-bold border border-subtle ${
+                            isSecret
+                              ? "bg-danger-soft text-danger"
+                              : "surface-raised text-info"
+                          }`}
+                        >
+                          {file.meta.fileType}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-400 font-mono truncate mt-0.5">
+                        {file.locationFromRoot}
+                      </p>
+
+                      <div className="flex items-center space-x-2 text-[10px] text-slate-500 font-mono mt-1 truncate">
+                        <span>{lines} lines</span>
+                        <span>•</span>
+                        <span>{formatBytes(file.size)}</span>
+                        {file.textContent != null && (
+                          <>
+                            <span>•</span>
+                            <span
+                              className={
+                                tokens > HEAVY_FILE_TOKENS
+                                  ? "text-warn font-semibold"
+                                  : ""
+                              }
+                              title="Estimated tokens for this file"
+                            >
+                              ~{tokens.toLocaleString()} tok
+                            </span>
+                          </>
+                        )}
+                        <span>•</span>
+                        <span className="capitalize">{file.meta.language}</span>
+                        {file.isLock && (
+                          <span className="text-warn font-semibold">
+                            • lockfile — off by default
+                          </span>
+                        )}
+                        {isSecret && (
+                          <span className="text-danger font-semibold">
+                            • secrets?
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownloadSingleFile(file);
+                      }}
+                      className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-[var(--surface-hover)] transition-colors shrink-0"
+                      title={`Export this single file in ${FORMAT_META[formatStyle].label} format`}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               );
             })}
+            {padBottom > 0 && <div style={{ height: padBottom }} />}
           </div>
         </div>
 

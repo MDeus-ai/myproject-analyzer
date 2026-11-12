@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Search,
   Filter,
@@ -19,9 +19,14 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { CollisionStrategy, ProcessedFile } from "@myproject/core/types";
-import { formatBytes, formatDate, getFileCategory } from "@myproject/core/fileHelpers";
+import {
+  formatBytes,
+  formatDate,
+  getFileCategory,
+} from "@myproject/core/fileHelpers";
 import { triggerFileDownload } from "@myproject/core/zipExporter";
 import { copyToClipboard } from "@myproject/core/clipboard";
+import { useVirtualRows } from "./useVirtualRows";
 
 interface FlatFilesViewProps {
   files: ProcessedFile[];
@@ -34,6 +39,10 @@ interface FlatFilesViewProps {
   zipProgress?: { percent: number; currentFile: string };
   onOpenAnotherFolder: () => void;
 }
+
+/** Fixed row height — every cell truncates to a single line, so rows are
+ *  stable. Required for windowing math. */
+const ROW_H = 44;
 
 export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
   files,
@@ -82,6 +91,23 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
         return sortOrder === "asc" ? cmp : -cmp;
       });
   }, [files, searchQuery, selectedCategory, sortBy, sortOrder]);
+
+  // Windowed rendering: large projects have thousands of rows; mounting all
+  // of them is what made tab switches and watch refreshes stutter.
+  const {
+    ref: scrollRef,
+    start,
+    end,
+    padTop,
+    padBottom,
+    onScroll,
+  } = useVirtualRows(filteredFiles.length, ROW_H);
+
+  // Reset scroll when the filter set changes, so the window starts at the top.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, selectedCategory, sortBy, sortOrder]);
 
   const toggleSelectAll = () => {
     if (selectedFileIds.size === filteredFiles.length) {
@@ -274,8 +300,12 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
         </div>
       )}
 
-      {/* Files Table */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+      {/* Files Table — virtualized scroll container */}
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className="flex-1 overflow-y-auto px-4 sm:px-6 py-4"
+      >
         {filteredFiles.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Filter className="w-10 h-10 text-slate-600 mb-3" />
@@ -317,13 +347,22 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border-subtle)] font-mono">
-                  {filteredFiles.map((file) => {
+                  {padTop > 0 && (
+                    <tr aria-hidden="true">
+                      <td
+                        colSpan={7}
+                        style={{ height: padTop, padding: 0, border: 0 }}
+                      />
+                    </tr>
+                  )}
+                  {filteredFiles.slice(start, end).map((file) => {
                     const isSelected = selectedFileIds.has(file.id);
                     const isRenamed = file.flattenedName !== file.originalName;
 
                     return (
                       <tr
                         key={file.id}
+                        style={{ height: ROW_H }}
                         className={`transition-colors hover:bg-[var(--surface-hover)] ${
                           isSelected ? "bg-accent-soft" : ""
                         }`}
@@ -351,7 +390,7 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                             </span>
                             {isRenamed && (
                               <span
-                                className="text-[10px] px-1.5 py-0.5 rounded-full bg-warn-soft text-warn font-sans border border-warn font-medium"
+                                className="text-[10px] px-1.5 py-0.5 rounded-full bg-warn-soft text-warn font-sans border border-warn font-medium shrink-0"
                                 title={`Original was: ${file.originalName}`}
                               >
                                 Renamed
@@ -420,6 +459,14 @@ export const FlatFilesView: React.FC<FlatFilesViewProps> = ({
                       </tr>
                     );
                   })}
+                  {padBottom > 0 && (
+                    <tr aria-hidden="true">
+                      <td
+                        colSpan={7}
+                        style={{ height: padBottom, padding: 0, border: 0 }}
+                      />
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

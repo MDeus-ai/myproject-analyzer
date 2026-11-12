@@ -53,8 +53,9 @@ import type {
   WatchEvent,
   WatchEventBatch,
 } from "@myproject/platform/types";
+import { buildWatchIgnored } from "./watch-filter";
 import { DEFAULT_EXCLUSION_RULES } from "@myproject/core/folderExclusions";
-import { isGitignored, parseGitignore } from "@myproject/core/gitignoreParser";
+import { parseGitignore } from "@myproject/core/gitignoreParser";
 import { stripSmartPasteMarkers } from "@myproject/core/smartPaste";
 import { walkFiles } from "./fs-walk";
 import { WatchBatcher } from "./watch-batcher";
@@ -385,17 +386,7 @@ function registerIpc(): void {
         }
       }
 
-      const ignored = (testPath: string): boolean => {
-        const rel = path.relative(root, testPath).split(path.sep).join("/");
-        if (!rel || rel.startsWith("..")) return true;
-        if (rel.split("/").some((seg) => heavy.has(seg.toLowerCase()))) {
-          return true;
-        }
-        if (gitignoreRules.length > 0 && isGitignored(rel, gitignoreRules)) {
-          return true;
-        }
-        return false;
-      };
+      const ignored = buildWatchIgnored(root, heavy, gitignoreRules);
 
       const sessionId = randomUUID();
       const batcher = new WatchBatcher((events) => {
@@ -405,7 +396,7 @@ function registerIpc(): void {
       }, 150);
 
       const watcher = chokidar.watch(root, {
-        ignored: (testPath) => ignored(testPath),
+        ignored, // was: (testPath) => ignored(testPath)
         ignoreInitial: true, // the scan already covered the initial state
         persistent: true,
       });
@@ -453,6 +444,7 @@ function registerIpc(): void {
       watcher.on("error", (err) => console.error("[watch]", err));
 
       watchSessions.set(sessionId, { id: sessionId, root, watcher, batcher });
+      console.log(`[watch] session ${sessionId} → ${root}`);
       return { ok: true, sessionId };
     },
   );

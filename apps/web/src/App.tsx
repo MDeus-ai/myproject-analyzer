@@ -23,6 +23,7 @@ import { FilePreviewModal } from "@myproject/ui";
 import { HelpShortcutsModal } from "@myproject/ui";
 import { ExclusionWarningModal } from "@myproject/ui";
 import { ImportProgressOverlay } from "@myproject/ui";
+import { useDebouncedValue } from "@myproject/ui";
 
 import {
   CollisionStrategy,
@@ -111,20 +112,33 @@ export default function App() {
     [],
   );
 
+  // ------------------------------------------------------------------
+  // Derived pipeline runs on a SETTLED copy of rawFiles. During a live-
+  // watch burst (saving files in an external editor), batches arrive every
+  // ~150ms; debouncing collapses N batches into ONE recompute of collision
+  // resolution + tree building (both walk every file). Project loads and
+  // clears flush immediately so imports never feel delayed.
+  // ------------------------------------------------------------------
+  const settledFiles = useDebouncedValue(
+    rawFiles,
+    200,
+    (prev, next) => prev.length === 0 || next.length === 0,
+  );
+
   // Compute resolved flattened files based on selected collision strategy
   const { resolvedFiles, collisionCount } = useMemo(() => {
-    if (rawFiles.length === 0) {
+    if (settledFiles.length === 0) {
       return { resolvedFiles: [], collisionCount: 0 };
     }
-    return resolveCollisions(rawFiles, collisionStrategy);
-  }, [rawFiles, collisionStrategy]);
+    return resolveCollisions(settledFiles, collisionStrategy);
+  }, [settledFiles, collisionStrategy]);
 
   // Compute folder hierarchy tree and statistics
   const { rootNode, stats } = useMemo(() => {
-    if (resolvedFiles.length === 0) {
+    if (settledFiles.length === 0) {
       return { rootNode: null, stats: null };
     }
-    const tree = buildFolderTree(rawFiles, rootFolderName || "folder");
+    const tree = buildFolderTree(settledFiles, rootFolderName || "folder");
     return {
       rootNode: tree.root,
       stats: {
@@ -132,7 +146,7 @@ export default function App() {
         collisionCount,
       },
     };
-  }, [rawFiles, resolvedFiles, rootFolderName, collisionCount]);
+  }, [settledFiles, rootFolderName, collisionCount]);
 
   // Auto-dismiss the "project loaded" toast
   useEffect(() => {
@@ -183,35 +197,41 @@ export default function App() {
 
     const platform = getPlatform();
 
-    // 1. Read fresh content for added/changed files through the platform
-    //    channel (gated: size cap + binary sniff, same as the scan).
-    const freshFiles: ProcessedFile[] = [];
-    for (const e of fileEvents) {
-      if (e.type === "unlink") continue;
-      const rel = `${ctx.name}/${e.path}`;
-      const segs = rel.split("/");
-      const name = segs[segs.length - 1] ?? e.path;
-      const file: ProcessedFile = {
-        id: `watch-${rel}-${e.mtimeMs ?? Date.now()}`,
-        name,
-        originalName: name,
-        flattenedName: name,
-        relativePath: rel,
-        pathSegments: segs,
-        directoryPath: segs.length > 2 ? segs.slice(1, -1).join("/") : "",
-        size: e.size ?? 0,
-        type: "",
-        extension: getFileExtension(name),
-        lastModified: e.mtimeMs ?? Date.now(),
-        source: {
-          kind: "path",
-          absolutePath: `${ctx.abs.replace(/[\\/]+$/, "")}/${e.path}`,
-        },
-      };
-      const text = await platform.readText(file);
-      if (text !== undefined) file.textContent = text;
-      freshFiles.push(file);
-    }
+    // 1. Build file shells, then read ALL fresh content in parallel through
+    //    the platform channel (gated: size cap + binary sniff, same as the
+    //    scan). Was: one awaited IPC round-trip per file — a 30-file burst
+    //    took 30 serialized round trips before React saw anything.
+    const freshFiles: ProcessedFile[] = fileEvents
+      .filter((e) => e.type !== "unlink")
+      .map((e) => {
+        const rel = `${ctx.name}/${e.path}`;
+        const segs = rel.split("/");
+        const name = segs[segs.length - 1] ?? e.path;
+        return {
+          id: `watch-${rel}-${e.mtimeMs ?? Date.now()}`,
+          name,
+          originalName: name,
+          flattenedName: name,
+          relativePath: rel,
+          pathSegments: segs,
+          directoryPath: segs.length > 2 ? segs.slice(1, -1).join("/") : "",
+          size: e.size ?? 0,
+          type: "",
+          extension: getFileExtension(name),
+          lastModified: e.mtimeMs ?? Date.now(),
+          source: {
+            kind: "path",
+            absolutePath: `${ctx.abs.replace(/[\\/]+$/, "")}/${e.path}`,
+          },
+        } as ProcessedFile;
+      });
+
+    const texts = await Promise.all(
+      freshFiles.map((f) => platform.readText(f)),
+    );
+    freshFiles.forEach((f, i) => {
+      if (texts[i] !== undefined) f.textContent = texts[i];
+    });
 
     const removedRels = new Set(
       fileEvents
@@ -220,16 +240,39 @@ export default function App() {
     );
 
     // 2. One atomic state update: drop removed + replaced, append fresh.
-    //    New object identities guarantee the useMemo chains (tree, stats,
-    //    collisions, DepLenz graph) recompute.
+    //    Preserve object identity for byte-identical files (mtime-only
+    //    touches) so per-file caches and downstream memos survive; bail out
+    //    entirely when nothing actually changed.
     setRawFiles((prev) => {
       if (freshFiles.length === 0 && removedRels.size === 0) return prev;
-      const freshByRel = new Map(freshFiles.map((f) => [f.relativePath, f]));
-      const kept = prev.filter(
-        (f) =>
-          !removedRels.has(f.relativePath) && !freshByRel.has(f.relativePath),
-      );
-      return [...kept, ...freshFiles];
+
+      const prevByRel = new Map(prev.map((f) => [f.relativePath, f]));
+      const freshByRel = new Map<string, ProcessedFile>();
+      for (const f of freshFiles) {
+        const old = prevByRel.get(f.relativePath);
+        freshByRel.set(
+          f.relativePath,
+          old && old.size === f.size && old.textContent === f.textContent
+            ? old
+            : f,
+        );
+      }
+
+      // Rebuild in prev order so the identity comparison below is meaningful.
+      const next: ProcessedFile[] = [];
+      for (const f of prev) {
+        if (removedRels.has(f.relativePath)) continue;
+        next.push(freshByRel.get(f.relativePath) ?? f);
+      }
+      for (const f of freshFiles) {
+        if (!prevByRel.has(f.relativePath)) {
+          next.push(freshByRel.get(f.relativePath)!);
+        }
+      }
+
+      return next.length === prev.length && next.every((f, i) => f === prev[i])
+        ? prev
+        : next;
     });
 
     // 3. Keep the secrets banner honest for newly appeared secret files.
@@ -290,6 +333,9 @@ export default function App() {
         setIsWatching(true);
       } catch (err) {
         console.error("[watch] failed to start:", err);
+        setWatchNotice(
+          "Live watch failed to start — disk changes won't auto-refresh",
+        );
       }
     },
     [stopWatching, handleWatchBatch],
@@ -450,7 +496,53 @@ export default function App() {
     }
   }, [handleLoadSample, rawFiles.length]);
 
-  // Global Keyboard Shortcuts
+  // Download all stripped files as a flat ZIP archive
+  const handleDownloadZip = useCallback(async () => {
+    if (resolvedFiles.length === 0 || isZipping) return;
+
+    setIsZipping(true);
+    setZipProgress({ percent: 0, currentFile: "Initializing flat archive..." });
+
+    try {
+      const zipBlob = await createFlatZip(resolvedFiles, (progress) => {
+        setZipProgress(progress);
+      });
+
+      const safeName = (rootFolderName || "flattened_files").replace(
+        /[^a-zA-Z0-9_-]/g,
+        "_",
+      );
+      triggerFileDownload(zipBlob, `${safeName}_flat_files.zip`);
+    } catch (err) {
+      console.error("Failed to create ZIP:", err);
+    } finally {
+      setIsZipping(false);
+      setZipProgress(undefined);
+    }
+  }, [resolvedFiles, isZipping, rootFolderName]);
+
+  // Direct PDF download trigger
+  const handleDownloadPdfDirect = useCallback(() => {
+    if (!rootNode || !stats) return;
+    const doc = generateFolderPdf(rootNode, stats, resolvedFiles, {
+      title: `Directory Structure: ${stats.rootName}`,
+      includeTree: true,
+      includeStats: true,
+      includeInventoryTable: true,
+      includeSizes: true,
+      includeDates: true,
+      treeStyle: "standard",
+      themeColor: "blue",
+      treeFont: "sans",
+      treeFontSize: 9.5,
+    });
+    const dateStr = new Date().toISOString().split("T")[0];
+    const safeName = stats.rootName.replace(/[^a-zA-Z0-9_-]/g, "_");
+    downloadPdf(doc, `${safeName}_structure_${dateStr}.pdf`);
+  }, [rootNode, stats, resolvedFiles]);
+
+  // Global Keyboard Shortcuts — real dependency array (was: re-registered on
+  // every render). The two download handlers are useCallback'ed above.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -466,7 +558,7 @@ export default function App() {
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (resolvedFiles.length > 0 && !isZipping) {
-          handleDownloadZip();
+          void handleDownloadZip();
         }
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
         e.preventDefault();
@@ -502,52 +594,15 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  });
-
-  // Download all stripped files as a flat ZIP archive
-  const handleDownloadZip = async () => {
-    if (resolvedFiles.length === 0 || isZipping) return;
-
-    setIsZipping(true);
-    setZipProgress({ percent: 0, currentFile: "Initializing flat archive..." });
-
-    try {
-      const zipBlob = await createFlatZip(resolvedFiles, (progress) => {
-        setZipProgress(progress);
-      });
-
-      const safeName = (rootFolderName || "flattened_files").replace(
-        /[^a-zA-Z0-9_-]/g,
-        "_",
-      );
-      triggerFileDownload(zipBlob, `${safeName}_flat_files.zip`);
-    } catch (err) {
-      console.error("Failed to create ZIP:", err);
-    } finally {
-      setIsZipping(false);
-      setZipProgress(undefined);
-    }
-  };
-
-  // Direct PDF download trigger
-  const handleDownloadPdfDirect = () => {
-    if (!rootNode || !stats) return;
-    const doc = generateFolderPdf(rootNode, stats, resolvedFiles, {
-      title: `Directory Structure: ${stats.rootName}`,
-      includeTree: true,
-      includeStats: true,
-      includeInventoryTable: true,
-      includeSizes: true,
-      includeDates: true,
-      treeStyle: "standard",
-      themeColor: "blue",
-      treeFont: "sans",
-      treeFontSize: 9.5,
-    });
-    const dateStr = new Date().toISOString().split("T")[0];
-    const safeName = stats.rootName.replace(/[^a-zA-Z0-9_-]/g, "_");
-    downloadPdf(doc, `${safeName}_structure_${dateStr}.pdf`);
-  };
+  }, [
+    handleOpenFolder,
+    resolvedFiles.length,
+    isZipping,
+    rootNode,
+    stats,
+    handleDownloadZip,
+    handleDownloadPdfDirect,
+  ]);
 
   const handleFolderPickerChange = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -632,7 +687,7 @@ export default function App() {
             stats={stats}
             onOpenFolderClick={handleOpenFolder}
             onLoadSampleClick={handleLoadSample}
-            onDownloadZipClick={handleDownloadZip}
+            onDownloadZipClick={() => void handleDownloadZip()}
             onDownloadPdfClick={handleDownloadPdfDirect}
             onDownloadImageClick={() => setActiveTab("pdf")}
             onHelpClick={() => setIsHelpOpen(true)}
@@ -726,7 +781,7 @@ export default function App() {
                     onStrategyChange={setCollisionStrategy}
                     collisionCount={collisionCount}
                     onPreviewFile={setPreviewFile}
-                    onDownloadAllZip={handleDownloadZip}
+                    onDownloadAllZip={() => void handleDownloadZip()}
                     isZipping={isZipping}
                     zipProgress={zipProgress}
                     onOpenAnotherFolder={handleOpenFolder}
@@ -758,13 +813,16 @@ export default function App() {
 
                 {activeTab === "analyzer" && (
                   <CodeAnalyzerView
-                    files={rawFiles}
+                    files={settledFiles}
                     rootFolderName={rootFolderName}
                   />
                 )}
 
                 {activeTab === "deplenz" && (
-                  <DepLenzView files={rawFiles} onSelectFile={setPreviewFile} />
+                  <DepLenzView
+                    files={settledFiles}
+                    onSelectFile={setPreviewFile}
+                  />
                 )}
               </div>
             )}

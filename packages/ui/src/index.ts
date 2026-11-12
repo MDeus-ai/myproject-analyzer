@@ -16,3 +16,5 @@ export { PdfArchitectView } from "./PdfArchitectView";
 export { PdfCanvasViewer } from "./PdfCanvasViewer";
 export { SmartPasteDiffPreview } from "./SmartPasteDiffPreview";
 export { ThemeSwitcher } from "./ThemeSwitcher";
+export { useDebouncedValue } from "./useDebouncedValue";
+export { useVirtualRows } from "./useVirtualRows";
