@@ -13,6 +13,7 @@ import React, {
 import { DesktopHeader } from "@myproject/ui";
 import { DesktopLobby } from "@myproject/ui";
 import { HomePage } from "@myproject/ui";
+import { DocumentationView } from "@myproject/ui";
 import { FolderDropzone } from "@myproject/ui";
 import { FlatFilesView } from "@myproject/ui";
 import { DirectoryTreeView } from "@myproject/ui";
@@ -65,13 +66,45 @@ interface ImportToast {
 }
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<"home" | "workspace">("home");
-  const [homeSubMode, setHomeSubMode] = useState<"lobby" | "guide">("lobby");
+  const [currentView, setCurrentView] = useState<"home" | "workspace" | "docs">(
+    () =>
+      new URLSearchParams(window.location.search).get("view") === "docs"
+        ? "docs"
+        : "home",
+  );
+  const [previousView, setPreviousView] = useState<"home" | "workspace">("home");
+  const [docsInitialQuery, setDocsInitialQuery] = useState<string>("");
+  const [docsInitialAudience, setDocsInitialAudience] = useState<
+    "all" | "user" | "developer"
+  >("all");
   const [rawFiles, setRawFiles] = useState<ProcessedFile[]>([]);
   const [rootFolderName, setRootFolderName] = useState<string>("");
   const [collisionStrategy, setCollisionStrategy] =
     useState<CollisionStrategy>("enumerate");
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("files");
+
+  // Desktop Lobby appears ONLY on Desktop versions of the software
+  // (Electron runtime, or ?desktop=1 for preview/verification).
+  // Web edition always uses the web Landing Page (HomePage).
+  const isDesktopApp = useMemo(
+    () =>
+      getPlatform().id === "electron" ||
+      new URLSearchParams(window.location.search).get("desktop") === "1",
+    [],
+  );
+
+  const handleOpenDocumentation = useCallback(
+    (
+      initialQuery = "",
+      initialAudience: "all" | "user" | "developer" = "all",
+    ) => {
+      setPreviousView(currentView === "workspace" ? "workspace" : "home");
+      setDocsInitialQuery(initialQuery);
+      setDocsInitialAudience(initialAudience);
+      setCurrentView("docs");
+    },
+    [currentView],
+  );
 
   // Preview & Modal states
   const [previewFile, setPreviewFile] = useState<ProcessedFile | null>(null);
@@ -91,6 +124,12 @@ export default function App() {
 
   // Secrets detection state
   const [detectedSecretFiles, setDetectedSecretFiles] = useState<string[]>([]);
+
+  // Dismiss states for post-import warning banners (reset on new folder import)
+  const [isExclusionBannerDismissed, setIsExclusionBannerDismissed] =
+    useState(false);
+  const [isSecretsBannerDismissed, setIsSecretsBannerDismissed] =
+    useState(false);
 
   // Import progress & success feedback
   const [importProgress, setImportProgress] = useState<ScanProgress | null>(
@@ -172,6 +211,8 @@ export default function App() {
     ) => {
       setRawFiles(files);
       setRootFolderName(folderName);
+      setIsExclusionBannerDismissed(false);
+      setIsSecretsBannerDismissed(false);
       setActiveTab("files");
       setCurrentView("workspace");
       setImportToast({
@@ -778,61 +819,82 @@ export default function App() {
         onChange={handleFolderPickerChange}
       />
 
-      {currentView === "home" ? (
-        /* ================= DESKTOP SOFTWARE LOBBY / GUIDE ================= */
-        <div className="flex-1 overflow-y-auto flex flex-col">
-          {homeSubMode === "lobby" ? (
+      {currentView === "docs" ? (
+        /* ================= BUILT-IN SEARCHABLE DOCUMENTATION PAGE ================= */
+        <DocumentationView
+          onBack={() =>
+            setCurrentView(
+              previousView === "workspace" && resolvedFiles.length > 0
+                ? "workspace"
+                : "home",
+            )
+          }
+          backLabel={
+            previousView === "workspace" && resolvedFiles.length > 0
+              ? `Back to Workspace (${rootFolderName})`
+              : isDesktopApp
+                ? "Back to Desktop Workbench"
+                : "Back to Home"
+          }
+          initialQuery={docsInitialQuery}
+          initialAudience={docsInitialAudience}
+          onOpenFolder={handleOpenFolder}
+          onLoadSample={handleLoadSample}
+        />
+      ) : currentView === "home" ? (
+        isDesktopApp ? (
+          /* ================= NATIVE DESKTOP WORKBENCH LOBBY (Desktop Only, Edge-to-Edge) ================= */
+          <div className="flex-1 flex flex-col w-full h-full overflow-hidden">
             <DesktopLobby
               onScanResult={handleScanResult}
               onOpenFolderPicker={handleOpenFolder}
               onLoadScenario={handleLoadScenario}
               onLoadHistoryEntry={handleLoadHistoryEntry}
               onScanProgress={setImportProgress}
-              onSwitchToClassicGuide={() => setHomeSubMode("guide")}
+              onOpenDocumentation={handleOpenDocumentation}
+              onSwitchToClassicGuide={() => handleOpenDocumentation("", "all")}
               activeProjectName={rootFolderName}
               activeFileCount={resolvedFiles.length}
               onReturnToWorkspace={() => setCurrentView("workspace")}
             />
-          ) : (
-            <div className="flex-1 flex flex-col">
-              <div className="surface-header border-b border-chrome px-6 py-2.5 flex items-center justify-between text-xs text-slate-300 sticky top-0 z-50">
+          </div>
+        ) : (
+          /* ================= WEB EDITION LANDING PAGE (Web Only) ================= */
+          <div className="flex-1 overflow-y-auto">
+            {resolvedFiles.length > 0 && (
+              <div className="surface-header border-b border-chrome px-6 py-2 flex items-center justify-between text-xs text-slate-300 sticky top-0 z-50">
                 <div className="flex items-center space-x-2">
                   <Terminal className="w-4 h-4 text-purple-400" />
-                  <span>Product Tour & Architecture Overview</span>
+                  <span>
+                    Active workspace loaded:{" "}
+                    <strong className="text-white font-mono">
+                      {rootFolderName}
+                    </strong>{" "}
+                    ({resolvedFiles.length} files)
+                  </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {resolvedFiles.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setCurrentView("workspace")}
-                      className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-all shadow-sm cursor-pointer"
-                    >
-                      <span>Return to Workspace ({rootFolderName})</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setHomeSubMode("lobby")}
-                    className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-all shadow-sm cursor-pointer"
-                  >
-                    <span>Back to Software Lobby</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setCurrentView("workspace")}
+                  className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-all shadow-sm cursor-pointer"
+                >
+                  <span>Return to Workspace</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <HomePage
-                onScanResult={handleScanResult}
-                onLoadSample={handleLoadSample}
-                onLoadSampleWithHeavyFolders={handleLoadSampleWithHeavy}
-                onLoadScenario={handleLoadScenario}
-                onOpenFolderPicker={handleOpenFolder}
-                onScanProgress={setImportProgress}
-                showScenarios={showScenarios}
-              />
-            </div>
-          )}
-        </div>
+            )}
+            <HomePage
+              onScanResult={handleScanResult}
+              onLoadSample={handleLoadSample}
+              onLoadSampleWithHeavyFolders={handleLoadSampleWithHeavy}
+              onLoadScenario={handleLoadScenario}
+              onOpenFolderPicker={handleOpenFolder}
+              onScanProgress={setImportProgress}
+              onOpenDocumentation={handleOpenDocumentation}
+              showScenarios={showScenarios}
+            />
+          </div>
+        )
       ) : (
         /* ================= WORKSPACE INTERFACE ================= */
         <div className="flex flex-col h-full overflow-hidden">
@@ -847,6 +909,7 @@ export default function App() {
             onDownloadPdfClick={handleDownloadPdfDirect}
             onDownloadImageClick={() => setActiveTab("pdf")}
             onHelpClick={() => setIsHelpOpen(true)}
+            onDocsClick={() => handleOpenDocumentation("", "all")}
             onGoHomeClick={() => setCurrentView("home")}
             isZipping={isZipping}
             excludedFolders={excludedFolders}
@@ -858,13 +921,14 @@ export default function App() {
           />
 
           {/* Persistent banner listing everything that was excluded —
-              both categories, with a way back to the review modal */}
+              both categories, with a way back to the review modal and a close button */}
           {(excludedFolders.length > 0 || gitignoreExcludedCount > 0) &&
-            resolvedFiles.length > 0 && (
-              <div className="bg-warn-soft border-b border-warn px-4 py-1.5 flex items-center justify-between text-xs text-warn">
-                <div className="flex items-center space-x-2">
+            resolvedFiles.length > 0 &&
+            !isExclusionBannerDismissed && (
+              <div className="bg-warn-soft border-b border-warn px-4 py-1.5 flex items-center justify-between gap-3 text-xs text-warn">
+                <div className="flex items-center space-x-2 min-w-0">
                   <ShieldAlert className="w-4 h-4 text-warn shrink-0" />
-                  <span>
+                  <span className="truncate">
                     {excludedFolders.length > 0 && (
                       <>
                         <strong>Auto-Excluded Heavy Folders:</strong>{" "}
@@ -885,33 +949,59 @@ export default function App() {
                   </span>
                 </div>
 
-                {pendingScanResult && (
+                <div className="flex items-center gap-2 shrink-0">
+                  {pendingScanResult && (
+                    <button
+                      type="button"
+                      onClick={() => setIsExclusionModalOpen(true)}
+                      className="text-warn hover:opacity-80 underline font-medium shrink-0 cursor-pointer"
+                    >
+                      Review Exclusions
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setIsExclusionModalOpen(true)}
-                    className="text-warn hover:opacity-80 underline font-medium ml-4 shrink-0 cursor-pointer"
+                    onClick={() => setIsExclusionBannerDismissed(true)}
+                    aria-label="Close exclusion warning"
+                    data-testid="close-exclusion-warning"
+                    title="Close warning"
+                    className="p-1 rounded-md text-warn hover:bg-amber-500/20 transition-colors shrink-0 cursor-pointer"
                   >
-                    Review Exclusions
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                )}
+                </div>
               </div>
             )}
 
           {/* Persistent warning banner when possible secrets were detected */}
-          {detectedSecretFiles.length > 0 && resolvedFiles.length > 0 && (
-            <div className="bg-danger-soft border-b border-danger px-4 py-1.5 flex items-center space-x-2 text-xs text-danger">
-              <ShieldAlert className="w-4 h-4 text-danger shrink-0" />
-              <span>
-                <strong>Possible secrets detected:</strong>{" "}
-                {detectedSecretFiles.slice(0, 3).join(", ")}
-                {detectedSecretFiles.length > 3
-                  ? ` +${detectedSecretFiles.length - 3} more`
-                  : ""}
-                . These files will be included in exports — review before
-                sharing output with AI tools.
-              </span>
-            </div>
-          )}
+          {detectedSecretFiles.length > 0 &&
+            resolvedFiles.length > 0 &&
+            !isSecretsBannerDismissed && (
+              <div className="bg-danger-soft border-b border-danger px-4 py-1.5 flex items-center justify-between gap-3 text-xs text-danger">
+                <div className="flex items-center space-x-2 min-w-0">
+                  <ShieldAlert className="w-4 h-4 text-danger shrink-0" />
+                  <span className="truncate">
+                    <strong>Possible secrets detected:</strong>{" "}
+                    {detectedSecretFiles.slice(0, 3).join(", ")}
+                    {detectedSecretFiles.length > 3
+                      ? ` +${detectedSecretFiles.length - 3} more`
+                      : ""}
+                    . These files will be included in exports — review before
+                    sharing output with AI tools.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSecretsBannerDismissed(true)}
+                  aria-label="Close secrets warning"
+                  data-testid="close-secrets-warning"
+                  title="Close warning"
+                  className="p-1 rounded-md text-danger hover:bg-rose-500/20 transition-colors shrink-0 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
           {/* Main Workspace Tabs */}
           <main className="flex-1 overflow-hidden relative flex flex-col bg-[var(--app-bg)]">
@@ -1034,6 +1124,14 @@ export default function App() {
         <div className="fixed bottom-[max(4.75rem,calc(env(safe-area-inset-bottom)+3.5rem))] left-5 z-40 flex items-center space-x-2 px-3 py-2 rounded-xl surface-card border border-chrome shadow-2xl text-xs text-slate-300">
           <span className="w-2 h-2 rounded-full bg-cyan-400" />
           <span>{watchNotice}</span>
+          <button
+            type="button"
+            onClick={() => setWatchNotice(null)}
+            aria-label="Close watch notice"
+            className="p-0.5 rounded-md text-slate-400 hover:text-slate-100 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

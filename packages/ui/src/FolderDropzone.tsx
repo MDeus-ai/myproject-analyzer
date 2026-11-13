@@ -8,6 +8,8 @@ import {
   ShieldAlert,
   Code2,
   FlaskConical,
+  Cpu,
+  X,
 } from "lucide-react";
 import {
   readDroppedEntries,
@@ -165,7 +167,7 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
             </div>
           </div>
 
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-100 mb-3">
+          <h2 className="text-2xl sm:text-3xl font-normal tracking-tight text-slate-100 mb-3">
             Drop your folder here
           </h2>
 
@@ -196,11 +198,40 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
                 e.stopPropagation();
                 onLoadSample();
               }}
-              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome font-medium text-sm transition-all active:scale-95"
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome font-medium text-sm transition-all active:scale-95 cursor-pointer"
             >
-              <Sparkles className="w-4 h-4 text-slate-400" />
-              <span>Try Clean Demo Project</span>
+              <Sparkles className="w-4 h-4 text-purple-400" />
+              <span>Web Stack Demo</span>
             </button>
+
+            {onLoadScenario && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onLoadScenario("rust");
+                  }}
+                  className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome font-medium text-sm transition-all active:scale-95 cursor-pointer"
+                  title="Load Orbit KV Engine (Rust Cargo crate with structs, traits, and impl blocks)"
+                >
+                  <Cpu className="w-4 h-4 text-orange-400" />
+                  <span>Rust Crate Demo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onLoadScenario("cpp");
+                  }}
+                  className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome font-medium text-sm transition-all active:scale-95 cursor-pointer"
+                  title="Load Chrono Physics Engine (C++20 headers, templates, and CMake)"
+                >
+                  <Code2 className="w-4 h-4 text-sky-400" />
+                  <span>C++20 Demo</span>
+                </button>
+              </>
+            )}
 
             {onLoadSampleWithHeavyFolders && (
               <button
@@ -209,10 +240,10 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
                   e.stopPropagation();
                   onLoadSampleWithHeavyFolders();
                 }}
-                className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium text-sm transition-all active:scale-95"
+                className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-warn-soft hover:opacity-90 text-warn border border-warn font-medium text-sm transition-all active:scale-95 cursor-pointer"
                 title="Test how the software detects and warns about node_modules, .git, and dist"
               >
-                <ShieldAlert className="w-4 h-4 text-amber-400" />
+                <ShieldAlert className="w-4 h-4 text-warn" />
                 <span>Test node_modules Warning</span>
               </button>
             )}
@@ -220,8 +251,22 @@ export const FolderDropzone: React.FC<FolderDropzoneProps> = ({
 
           {/* Error readout */}
           {errorStatus && (
-            <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/30 text-xs mb-4">
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-danger-soft text-danger border border-danger text-xs mb-4"
+            >
               <span>{errorStatus}</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setErrorStatus("");
+                }}
+                aria-label="Close error message"
+                className="p-0.5 rounded-full hover:bg-rose-500/20 text-danger transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 

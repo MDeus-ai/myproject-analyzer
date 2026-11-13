@@ -328,6 +328,9 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
   // Verification pipeline (Stages 1-5)
   const [verifyReport, setVerifyReport] = useState<VerifyReport | null>(null);
   const [expandedDiffPath, setExpandedDiffPath] = useState<string | null>(null);
+  const [isSyntaxBannerDismissed, setIsSyntaxBannerDismissed] = useState(false);
+  const [isSmartPasteWarningsDismissed, setIsSmartPasteWarningsDismissed] =
+    useState(false);
 
   useEffect(() => {
     setSelectedSymbolId((prev) =>
@@ -349,6 +352,8 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
     setPlanInput("");
     setPlannedResult(null);
     setExpandedDiffPath(null);
+    setIsSyntaxBannerDismissed(false);
+    setIsSmartPasteWarningsDismissed(false);
     setMobilePane("list");
     setSelectedFolder("all");
     setSelectedKind("all");
@@ -1041,7 +1046,7 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
       </div>
 
       {/* Syntax Error Warning Banner */}
-      {analysis.totalSyntaxWarnings > 0 && (
+      {analysis.totalSyntaxWarnings > 0 && !isSyntaxBannerDismissed && (
         <div className="bg-warn-soft border-b border-warn px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 text-xs text-warn shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <AlertTriangle className="w-4 h-4 text-warn shrink-0" />
@@ -1054,13 +1059,25 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
               dependency accuracy.
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowDiagnosticsModal(true)}
-            className="px-3 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-warn border border-warn font-semibold cursor-pointer transition-colors shrink-0 whitespace-nowrap"
-          >
-            Review {analysis.totalSyntaxWarnings} Diagnostics
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowDiagnosticsModal(true)}
+              className="px-3 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-warn border border-warn font-semibold cursor-pointer transition-colors shrink-0 whitespace-nowrap"
+            >
+              Review {analysis.totalSyntaxWarnings} Diagnostics
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSyntaxBannerDismissed(true)}
+              aria-label="Close syntax warnings banner"
+              data-testid="close-syntax-warning"
+              title="Close warning"
+              className="p-1 rounded-md text-warn hover:bg-amber-500/20 transition-colors cursor-pointer shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -2270,16 +2287,29 @@ export const DepLenzView: React.FC<DepLenzViewProps> = ({
                 </div>
 
                 {/* Parse warnings */}
-                {smartPasteResult && smartPasteResult.warnings.length > 0 && (
-                  <div className="p-3 rounded-xl bg-warn-soft border border-warn text-[11px] text-warn space-y-1">
-                    {smartPasteResult.warnings.map((w, i) => (
-                      <p key={i} className="flex items-start gap-1.5">
-                        <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-                        <span>{w}</span>
-                      </p>
-                    ))}
-                  </div>
-                )}
+                {smartPasteResult &&
+                  smartPasteResult.warnings.length > 0 &&
+                  !isSmartPasteWarningsDismissed && (
+                    <div className="p-3 rounded-xl bg-warn-soft border border-warn text-[11px] text-warn flex items-start justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        {smartPasteResult.warnings.map((w, i) => (
+                          <p key={i} className="flex items-start gap-1.5">
+                            <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                            <span>{w}</span>
+                          </p>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsSmartPasteWarningsDismissed(true)}
+                        aria-label="Close parse warnings"
+                        title="Close warning"
+                        className="p-1 rounded-md text-warn hover:bg-amber-500/20 transition-colors cursor-pointer shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
 
                 {/* Verification report — Stages 1-5, runs before anything is applied */}
                 {verifyReport && smartPasteResult && (

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   FolderUp,
   FolderTree,
@@ -21,10 +21,17 @@ import {
   FilePenLine,
   FilePlus2,
   FileX2,
+  Cpu,
+  History,
+  Search,
+  Terminal,
+  CheckCircle2,
+  ChevronDown,
 } from "lucide-react";
 import { FolderScanResult } from "@myproject/core/types";
 import { FolderDropzone } from "./FolderDropzone";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { CodeSyntaxHighlighter } from "./CodeSyntaxHighlighter";
 import { ScanProgress } from "@myproject/core/folderReader";
 import { SampleScenarioId } from "@myproject/core/sampleProject";
 
@@ -38,6 +45,10 @@ interface HomePageProps {
   onLoadScenario?: (id: SampleScenarioId) => void;
   onOpenFolderPicker: () => void;
   onScanProgress?: (progress: ScanProgress | null) => void;
+  onOpenDocumentation?: (
+    initialQuery?: string,
+    initialAudience?: "all" | "user" | "developer",
+  ) => void;
   showScenarios?: boolean;
 }
 
@@ -350,6 +361,167 @@ const ANALYZER_FORMAT_CARDS: AnalyzerFormatCard[] = [
   },
 ];
 
+const POLYGLOT_SHOWCASE: Record<
+  "web" | "rust" | "cpp",
+  {
+    id: "web" | "rust" | "cpp";
+    label: string;
+    badge: string;
+    scenarioId: SampleScenarioId;
+    filePath: string;
+    extensions: string;
+    extractedSymbols: string[];
+    bridgeHighlight: string;
+    code: string;
+  }
+> = {
+  web: {
+    id: "web",
+    label: "Web Dev (TS / React / Vue / Svelte)",
+    badge: "acme-saas-platform",
+    scenarioId: "clean",
+    filePath: "src/components/BillingDashboard.tsx",
+    extensions: ".ts · .tsx · .js · .jsx · .vue · .svelte",
+    extractedSymbols: [
+      "UI BillingDashboard()",
+      "use useSubscription()",
+      "fn calculateProration()",
+      "interface PlanTier",
+    ],
+    bridgeHighlight:
+      "Resolves ES module imports, barrel index.ts re-exports, dynamic import(), React.memo/forwardRef components, and custom hooks.",
+    code: `import React, { useMemo } from "react";
+import { useSubscription } from "../hooks/useSubscription";
+import { calculateProration, type PlanTier } from "../utils/pricing";
+
+export function BillingDashboard({ tier }: { tier: PlanTier }) {
+  const { activeInvoice, refreshBilling } = useSubscription(tier.id);
+  const netDelta = useMemo(
+    () => calculateProration(activeInvoice, tier),
+    [activeInvoice, tier],
+  );
+  return <section className="p-6">{netDelta.formatted}</section>;
+}`,
+  },
+  rust: {
+    id: "rust",
+    label: "Rust (Cargo Crates & Traits)",
+    badge: "orbit-kv-engine",
+    scenarioId: "rust",
+    filePath: "src/engine.rs",
+    extensions: ".rs · Cargo.toml",
+    extractedSymbols: [
+      "struct StorageEngine",
+      "trait WalRecovery",
+      "fn put_batch()",
+      "fn compact_segments()",
+    ],
+    bridgeHighlight:
+      "Parses pub/async/unsafe fn, struct, enum, trait, and impl Trait for Type blocks plus crate:: / super:: / mod module paths.",
+    code: `use crate::wal::{WalLog, WalEntry};
+use crate::memtable::MemTable;
+
+pub struct StorageEngine {
+    memtable: MemTable,
+    wal: WalLog,
+}
+
+impl StorageEngine {
+    pub fn put_batch(&mut self, key: &str, payload: &[u8]) -> Result<u64, String> {
+        let seq = self.wal.append_entry(WalEntry::new(key, payload))?;
+        self.memtable.insert_versioned(key, payload, seq);
+        Ok(seq)
+    }
+}`,
+  },
+  cpp: {
+    id: "cpp",
+    label: "C / C++20 (Headers & CMake)",
+    badge: "chrono-physics-engine",
+    scenarioId: "cpp",
+    filePath: "src/world.cpp",
+    extensions: ".c · .cpp · .cc · .h · .hpp · CMakeLists.txt",
+    extractedSymbols: [
+      "class PhysicsWorld",
+      "method PhysicsWorld::stepSimulation()",
+      "fn integrateVerlet()",
+      "fn resolveCollisions()",
+    ],
+    bridgeHighlight:
+      "Automatic Header-to-Source Bridging pairs #include \"world.hpp\" declarations with out-of-line Class::method definitions in src/world.cpp.",
+    code: `#include "../include/world.hpp"
+#include "../include/integrator.hpp"
+
+namespace chrono {
+  void PhysicsWorld::stepSimulation(double dt) {
+    for (auto& body : m_bodies) {
+      integrateVerlet(body, m_gravity, dt);
+    }
+    resolveCollisions(m_bodies, m_solverIterations);
+  }
+}`,
+  },
+};
+
+const NAVBAR_SECTION_ITEMS = [
+  {
+    href: "#features",
+    label: "All-In-One Toolkit",
+    sublabel: "Flat File Stripper, Hierarchy Tree, Vector PDF & Stats",
+    badge: "Core",
+    icon: Layers,
+    iconCls: "text-purple-400",
+  },
+  {
+    href: "#polyglot",
+    label: "Polyglot AST Engine",
+    sublabel: "Web (TS/React/Vue), Rust Cargo Crates & C/C++20",
+    badge: "Web · Rust · C++",
+    icon: Cpu,
+    iconCls: "text-orange-400",
+  },
+  {
+    href: "#deplenz",
+    label: "DepLenz & 60fps Map",
+    sublabel: "Interactive call graph, module clusters & blast radius",
+    badge: "60fps SVG",
+    icon: Network,
+    iconCls: "text-purple-400",
+  },
+  {
+    href: "#evolution",
+    label: "Evolution Logs & AI Directives",
+    sublabel: "Token-efficient handover logs & interwoven user actions",
+    badge: "-95% Tokens",
+    icon: History,
+    iconCls: "text-cyan-400",
+  },
+  {
+    href: "#smart-paste",
+    label: "Smart Paste & 5-Stage Verifier",
+    sublabel: "Structured LLM file blocks, symbol audit & disk apply",
+    badge: "Round-Trip",
+    icon: ClipboardPaste,
+    iconCls: "text-emerald-400",
+  },
+  {
+    href: "#codefile-analyzer",
+    label: "CodeFile Analyzer",
+    sublabel: "3-part metadata layout & 6 LLM export formats",
+    badge: "6 Formats",
+    icon: Code2,
+    iconCls: "text-indigo-400",
+  },
+  {
+    href: "#auto-shield",
+    label: "Auto-Shield Guard",
+    sublabel: "Heavy directory bypass, .gitignore & secrets scanner",
+    badge: "Safety",
+    icon: ShieldAlert,
+    iconCls: "text-amber-400",
+  },
+] as const;
+
 export const HomePage: React.FC<HomePageProps> = ({
   onScanResult,
   onLoadSample,
@@ -357,25 +529,48 @@ export const HomePage: React.FC<HomePageProps> = ({
   onLoadScenario,
   onOpenFolderPicker,
   onScanProgress,
+  onOpenDocumentation,
 }) => {
   const [analyzerPreviewId, setAnalyzerPreviewId] =
     useState<AnalyzerPreviewId>("standard");
+  const [polyglotTab, setPolyglotTab] = useState<"web" | "rust" | "cpp">("rust");
+  const [isNavDropdownOpen, setIsNavDropdownOpen] = useState(false);
+  const navDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isNavDropdownOpen) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      if (
+        navDropdownRef.current &&
+        !navDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsNavDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsNavDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isNavDropdownOpen]);
+
   const activePreview =
     ANALYZER_FORMAT_PREVIEWS.find((p) => p.id === analyzerPreviewId) ??
     ANALYZER_FORMAT_PREVIEWS[0];
+  const activePolyglot = POLYGLOT_SHOWCASE[polyglotTab];
 
   return (
-    <div className="min-h-screen bg-[var(--app-bg)] text-slate-100 flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-200">
-      {/* Top Navbar
-          Row 1: brand + inline nav (xl+) + actions. The nav is flex-1 +
-          min-w-0 + overflow-x-auto: it occupies only the space actually
-          left between the brand and the action cluster, and SCROLLS
-          internally if the links exceed it — overlap is impossible by
-          construction, at any viewport width.
-          Row 2 (below xl): scrollable chip strip with the same links. */}
+    <div className="min-h-screen bg-[var(--app-bg)] text-slate-100 font-sans selection:bg-purple-500/30 selection:text-purple-200">
+      {/* Top Navbar: Brand + Sections Dropdown + Single Documentation Button + Actions */}
       <header className="sticky top-0 z-40 glass-header border-b border-chrome">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-4">
-          {/* Brand */}
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+          {/* Left: Brand */}
           <div className="flex items-center space-x-3 shrink-0">
             <div className="w-9 h-9 rounded-xl bg-purple-600 flex items-center justify-center text-white shadow-sm">
               <FolderTree className="w-5 h-5" />
@@ -390,57 +585,101 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
           </div>
 
-          {/* Inline nav (xl+) — constrained by flexbox itself */}
-          <nav
-            className="hidden min-[1500px]:flex items-center space-x-6 text-sm text-slate-300 flex-1 min-w-0 overflow-x-auto scrollbar-none scroll-fade-x whitespace-nowrap"
-            aria-label="Sections"
-          >
-            <a
-              href="#features"
-              className="whitespace-nowrap hover:text-purple-300 transition-colors"
-            >
-              Features
-            </a>
-            <a
-              href="#deplenz"
-              className="whitespace-nowrap hover:text-purple-300 transition-colors font-medium text-purple-400"
-            >
-              DepLenz
-            </a>
-            <a
-              href="#smart-paste"
-              className="whitespace-nowrap hover:text-emerald-300 transition-colors font-medium text-emerald-400"
-            >
-              Smart Paste
-            </a>
-            <a
-              href="#codefile-analyzer"
-              className="whitespace-nowrap hover:text-purple-300 transition-colors"
-            >
-              CodeFile Analyzer
-            </a>
-            <a
-              href="#auto-shield"
-              className="whitespace-nowrap hover:text-purple-300 transition-colors"
-            >
-              Auto-Shield
-            </a>
-            <a
-              href="#how-it-works"
-              className="whitespace-nowrap hover:text-purple-300 transition-colors"
-            >
-              How It Works
-            </a>
-          </nav>
+          {/* Right cluster: Features Dropdown + Single Documentation Button + Theme + CTA */}
+          <div className="flex items-center space-x-2 sm:space-x-2.5 shrink-0 ml-auto">
+            {/* Features & Sections Dropdown (ThemeSwitcher-style popover) */}
+            <div ref={navDropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsNavDropdownOpen((v) => !v)}
+                aria-expanded={isNavDropdownOpen}
+                aria-haspopup="menu"
+                data-testid="navbar-features-dropdown-trigger"
+                className={`flex items-center space-x-1.5 text-xs px-3 py-2 rounded-xl border transition-all cursor-pointer ${
+                  isNavDropdownOpen
+                    ? "chip-accent shadow-sm"
+                    : "surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border-chrome"
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <span className="font-semibold whitespace-nowrap">Features</span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${
+                    isNavDropdownOpen ? "rotate-180 text-purple-300" : ""
+                  }`}
+                />
+              </button>
 
-          {/* Right cluster: theme + actions (never shrinks) */}
-          <div className="flex items-center space-x-2.5 sm:space-x-3 shrink-0 ml-auto">
+              {isNavDropdownOpen && (
+                <div
+                  role="menu"
+                  aria-label="Jump to feature section"
+                  data-testid="navbar-features-dropdown-menu"
+                  className="absolute right-0 sm:left-0 sm:right-auto top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-1.5rem)] rounded-2xl surface-card border border-chrome shadow-2xl shadow-black/50 p-2 z-50 overflow-hidden"
+                >
+                  <div className="px-3 py-2 border-b border-subtle flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Jump to Section
+                    </span>
+                    <span className="text-[10px] font-mono text-purple-400">
+                      {NAVBAR_SECTION_ITEMS.length} capabilities
+                    </span>
+                  </div>
+                  <div className="py-1 space-y-0.5 max-h-[70vh] overflow-y-auto">
+                    {NAVBAR_SECTION_ITEMS.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <a
+                          key={item.href}
+                          href={item.href}
+                          role="menuitem"
+                          onClick={() => setIsNavDropdownOpen(false)}
+                          className="flex items-start gap-3 px-3 py-2.5 rounded-xl hover:bg-[var(--surface-hover)] transition-colors group"
+                        >
+                          <div className="w-8 h-8 rounded-lg surface-inset border border-chrome flex items-center justify-center shrink-0 mt-0.5 group-hover:border-purple-500/40">
+                            <Icon className={`w-4 h-4 ${item.iconCls}`} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-100 group-hover:text-purple-300 transition-colors truncate">
+                                {item.label}
+                              </span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded surface-inset border border-chrome text-slate-300 shrink-0">
+                                {item.badge}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 leading-snug mt-0.5">
+                              {item.sublabel}
+                            </p>
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Single Documentation Button */}
+            {onOpenDocumentation && (
+              <button
+                type="button"
+                onClick={() => onOpenDocumentation()}
+                data-testid="navbar-documentation-btn"
+                className="flex items-center space-x-1.5 text-xs px-3 py-2 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome transition-all cursor-pointer font-semibold"
+                title="Open 12-Chapter User Manual & Technical Developer Documentation"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <span className="whitespace-nowrap">Documentation</span>
+              </button>
+            )}
+
             <ThemeSwitcher />
 
             <button
               type="button"
               onClick={onLoadSample}
-              className="hidden lg:flex items-center space-x-1.5 text-xs px-3.5 py-2 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome transition-all"
+              className="hidden xl:flex items-center space-x-1.5 text-xs px-3.5 py-2 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 border border-chrome transition-all cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
               <span>Explore Demo</span>
@@ -459,39 +698,6 @@ export const HomePage: React.FC<HomePageProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Section nav chip strip — below xl */}
-        <div className="min-[1500px]:hidden border-t border-subtle">
-          <nav
-            className="max-w-[1600px] mx-auto px-4 sm:px-6 flex items-center gap-1.5 overflow-x-auto scrollbar-none py-2"
-            aria-label="Sections"
-          >
-            {[
-              { href: "#features", label: "Features", hot: false },
-              { href: "#deplenz", label: "DepLenz", hot: true },
-              { href: "#smart-paste", label: "Smart Paste", hot: true },
-              {
-                href: "#codefile-analyzer",
-                label: "CodeFile Analyzer",
-                hot: false,
-              },
-              { href: "#auto-shield", label: "Auto-Shield", hot: false },
-              { href: "#how-it-works", label: "How It Works", hot: false },
-            ].map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap font-medium transition-colors border ${
-                  link.hot
-                    ? "bg-emerald-600/15 text-emerald-300 border-emerald-500/30"
-                    : "surface-raised text-slate-400 hover:text-slate-200 border-subtle"
-                }`}
-              >
-                {link.label}
-              </a>
-            ))}
-          </nav>
-        </div>
       </header>
 
       {/* Hero Section */}
@@ -504,22 +710,29 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full surface-raised border border-chrome text-slate-300 text-xs font-medium mb-6">
             <Zap className="w-3.5 h-3.5 text-cyan-400" />
             <span>
-              Web Edition • 100% In-Browser Privacy • Zero Server Uploads
+              Web Edition • Polyglot Web, Rust &amp; C/C++20 AST • 100% Local
+              In-Browser Privacy
             </span>
           </div>
 
           {/* Main Headline */}
-          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-slate-50 max-w-4xl mx-auto leading-[1.15] mb-6">
-            Analyze, Flatten &amp; Export <br className="hidden sm:inline" />
-            <span className="hero-title-gradient">Any Project Codebase</span>
+          <h1 className="text-4xl sm:text-6xl font-normal tracking-tight text-slate-50 max-w-4xl mx-auto leading-[1.15] mb-6">
+            Analyze, Flatten &amp; Visualize <br className="hidden sm:inline" />
+            <span className="hero-title-gradient">
+              Web, Rust &amp; C/C++20 Codebases
+            </span>
           </h1>
 
           {/* Subtitle */}
-          <p className="text-base sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed mb-10">
-            Strip away nested subdirectories into pure flat files, generate
-            publication-grade hierarchy PDFs &amp; high-res images without
-            encoding glitches, and bundle codefiles with precise path and type
-            metadata — in six LLM-ready formats.
+          <p className="text-base sm:text-lg text-slate-400 max-w-3xl mx-auto leading-relaxed mb-10">
+            Strip nested folders into flat archives, map polyglot call graphs
+            &amp; subsystem coupling in 60fps with{" "}
+            <strong className="text-slate-200">DepLenz</strong>, weave{" "}
+            <strong className="text-slate-200">User Action Directives</strong>{" "}
+            &amp; token-efficient{" "}
+            <strong className="text-slate-200">Evolution Handover Logs</strong>{" "}
+            into surgical AI prompts, and export crisp ASCII vector PDFs or 6
+            LLM bundle formats.
           </p>
 
           {/* Embedded Dropzone inside Hero */}
@@ -537,36 +750,37 @@ export const HomePage: React.FC<HomePageProps> = ({
           {/* Metric highlights */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto text-left">
             <div className="p-4 rounded-2xl surface-card border border-chrome">
-              <span className="block text-2xl font-bold text-slate-100 font-mono">
-                0ms
+              <span className="block text-2xl font-medium tracking-tight text-slate-100">
+                Polyglot AST
               </span>
               <span className="text-xs text-slate-400 mt-1 block">
-                Server latency • Pure client-side memory
+                Web (TS/React/Vue), Rust Crates &amp; C/C++20
               </span>
             </div>
             <div className="p-4 rounded-2xl surface-card border border-chrome">
-              <span className="block text-2xl font-bold text-warn font-mono">
+              <span className="block text-2xl font-medium tracking-tight text-warn">
                 Auto-Shield
               </span>
               <span className="text-xs text-slate-400 mt-1 block">
-                Bypasses <code className="text-warn">node_modules</code> &amp;
-                warns
+                Filters <code className="text-warn">node_modules</code>,{" "}
+                <code className="text-warn">target</code> &amp;{" "}
+                <code className="text-warn">build</code>
               </span>
             </div>
             <div className="p-4 rounded-2xl surface-card border border-chrome">
-              <span className="block text-2xl font-bold text-ok font-mono">
-                100% Crisp
+              <span className="block text-2xl font-medium tracking-tight text-ok">
+                -95% Tokens
               </span>
               <span className="text-xs text-slate-400 mt-1 block">
-                ASCII PDF &amp; 2x high-DPI image export
+                Surgical AI prompts + Evolution Handover logs
               </span>
             </div>
             <div className="p-4 rounded-2xl surface-card border border-chrome">
-              <span className="block text-2xl font-bold text-info font-mono">
-                35+ Formats
+              <span className="block text-2xl font-medium tracking-tight text-info">
+                60fps Map
               </span>
               <span className="text-xs text-slate-400 mt-1 block">
-                HTML, TSX, TS, JS, PY, SQL, JSON &amp; more
+                Direct-DOM SVG graph, clusters &amp; vector PDF
               </span>
             </div>
           </div>
@@ -580,10 +794,10 @@ export const HomePage: React.FC<HomePageProps> = ({
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-accent mb-2">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-accent mb-2">
               All-In-One Toolkit
             </h2>
-            <p className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight">
+            <p className="text-3xl sm:text-4xl font-normal text-slate-50 tracking-tight">
               Everything you need to inspect, flatten &amp; export
             </p>
           </div>
@@ -595,7 +809,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
                   <FileArchive className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-100 mb-2">
+                <h3 className="text-lg font-medium text-slate-100 mb-2">
                   Flat File Stripper
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
@@ -619,7 +833,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
                   <FolderTree className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-100 mb-2">
+                <h3 className="text-lg font-medium text-slate-100 mb-2">
                   Interactive Hierarchy Tree
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
@@ -642,7 +856,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
                   <FileText className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-100 mb-2">
+                <h3 className="text-lg font-medium text-slate-100 mb-2">
                   Structure PDF &amp; High-Res Image
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
@@ -667,7 +881,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
                   <Code2 className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-100 mb-2">
+                <h3 className="text-lg font-medium text-slate-100 mb-2">
                   CodeFile Analyzer
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
@@ -691,7 +905,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
                   <ShieldAlert className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-100 mb-2">
+                <h3 className="text-lg font-medium text-slate-100 mb-2">
                   Auto-Shield Exclusion
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
@@ -717,7 +931,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
                   <Layers className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-100 mb-2">
+                <h3 className="text-lg font-medium text-slate-100 mb-2">
                   Analytics &amp; Collision Audit
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
@@ -736,68 +950,247 @@ export const HomePage: React.FC<HomePageProps> = ({
             {/* 7. DepLenz Codebase Lens & Dependency Graph */}
             <div className="p-6 rounded-2xl surface-card border border-chrome hover:border-purple-500/40 transition-all flex flex-col justify-between group md:col-span-2 lg:col-span-3">
               <div>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center group-hover:scale-105 transition-transform">
                     <Network className="w-6 h-6" />
                   </div>
-                  <span className="text-[10px] font-mono px-2.5 py-1 rounded-full surface-raised text-accent border border-chrome">
-                    Web Dev Tech Stacks
-                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-mono px-2.5 py-1 rounded-full surface-raised text-accent border border-chrome">
+                      Web Dev (TS/JS/React/Vue/Svelte)
+                    </span>
+                    <span className="text-[10px] font-mono px-2.5 py-1 rounded-full surface-raised text-orange-400 border border-chrome">
+                      Rust (Cargo / .rs / Traits)
+                    </span>
+                    <span className="text-[10px] font-mono px-2.5 py-1 rounded-full surface-raised text-sky-400 border border-chrome">
+                      C / C++20 (.cpp / .hpp / CMake)
+                    </span>
+                  </div>
                 </div>
-                <h3 className="text-lg font-bold text-slate-100 mb-2">
-                  DepLenz: Codebase Lens &amp; Interactive Dependency Map
+                <h3 className="text-lg font-medium text-slate-100 mb-2">
+                  DepLenz: Polyglot Codebase Lens, 60fps Dependency Map &amp;
+                  Evolution Engine
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  Understand how every component, hook and function in your
-                  codebase relates at a glance. DepLenz renders a free-form
-                  interactive map of your entire project — drag nodes to
-                  rearrange, pan &amp; zoom, click to trace callers and callees
-                  with animated flow edges — then pivot into bi-directional
-                  dependency trees and surgical LLM prompt bundles so you never
-                  paste a whole repo into an AI again. And with{" "}
-                  <strong className="text-slate-300">Smart Paste</strong>, the
-                  AI's answer comes back as complete, parseable files — copy
-                  them individually or export a ZIP that drops cleanly into your
-                  project.
+                  Understand how every component, hook, function, Rust{" "}
+                  <code className="text-orange-400">struct/trait/impl</code>,
+                  and C++{" "}
+                  <code className="text-sky-400">Class::method</code>{" "}
+                  communicates at a glance. DepLenz renders a 60fps direct-DOM
+                  interactive map with module cluster bounding boxes and
+                  subsystem coupling counters — then extracts surgical LLM
+                  prompts interwoven with your{" "}
+                  <strong className="text-slate-200">User Action Prompt</strong>{" "}
+                  and token-efficient{" "}
+                  <strong className="text-slate-200">
+                    Project Evolution Handover Logs
+                  </strong>
+                  .
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs text-slate-300">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2 text-xs text-slate-300">
                   <div className="p-2.5 rounded-xl surface-raised border border-subtle">
                     <span className="font-semibold text-purple-300 block mb-1">
-                      Interactive Codebase Map
+                      60fps Interactive Map
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      Free-form SVG graph — drag nodes anywhere, cursor-anchored
-                      zoom, neighbor tracing with animated directional edges.
+                      Direct-DOM SVG dragging, module clusters, cursor-anchored
+                      zoom &amp; animated caller→callee flow edges.
                     </span>
                   </div>
                   <div className="p-2.5 rounded-xl surface-raised border border-subtle">
-                    <span className="font-semibold text-purple-300 block mb-1">
-                      Dependency Tree &amp; Search
+                    <span className="font-semibold text-orange-300 block mb-1">
+                      Polyglot AST &amp; Bridging
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      Upstream callers, downstream callees, blast radius — plus
-                      keyword search with enclosing-function detection.
+                      Understands Web stacks, Rust Cargo crates, and C/C++20
+                      header-to-source (<code className="font-mono">.hpp ↔ .cpp</code>)
+                      bridges.
                     </span>
                   </div>
                   <div className="p-2.5 rounded-xl surface-raised border border-subtle">
-                    <span className="font-semibold text-purple-300 block mb-1">
-                      Surgical Context &amp; Syntax Guard
+                    <span className="font-semibold text-emerald-300 block mb-1">
+                      User Action + Surgical AI
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      Extracts minimal LLM prompts (~85% token savings), catches
-                      syntax errors early, and ships answers back via Smart
-                      Paste.
+                      Interweaves your task directive into minimal ~250-token
+                      prompt bundles with Two-Step Plan Mode.
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl surface-raised border border-subtle">
+                    <span className="font-semibold text-cyan-300 block mb-1">
+                      Evolution Handover Logs
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Tracks architectural changes in ~15–25 tokens/entry so
+                      subsequent LLMs have instant continuity.
                     </span>
                   </div>
                 </div>
               </div>
               <div className="pt-3 mt-4 border-t border-subtle flex items-center justify-between text-[11px] font-mono text-slate-400">
                 <span className="px-2 py-0.5 rounded surface-raised border border-subtle">
-                  AST Static Analyzer
+                  Polyglot Static AST Analyzer
                 </span>
                 <span className="text-purple-400">
-                  Free-Form Canvas • Zero Server Uploads
+                  Web • Rust • C/C++20 • Zero Server Uploads
                 </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* NEW SECTION: Polyglot Codebase Intelligence & Live Syntax Showcase */}
+      <section
+        id="polyglot"
+        className="py-16 border-t border-chrome scroll-mt-16"
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div className="lg:col-span-5 space-y-4">
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-mono font-medium">
+                <Cpu className="w-3.5 h-3.5" />
+                <span>Polyglot Codebase Engine</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-normal text-slate-50 tracking-tight">
+                Native Understanding of Web, Rust &amp; C/C++20 Projects
+              </h2>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                MyProject Analyzer isn't limited to JavaScript. Its polyglot
+                static analysis engine extracts symbols, type contracts,
+                subsystem communication metrics, and syntax-colored previews
+                across modern web frameworks, systems-level Rust crates, and
+                C/C++20 translation units.
+              </p>
+
+              <div className="space-y-3 pt-1">
+                <div className="p-3.5 rounded-xl surface-card border border-chrome">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-purple-300 font-mono">
+                      Web Dev Stacks (.ts, .tsx, .js, .vue, .svelte)
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded surface-raised text-slate-400">
+                      ES Modules
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Extracts React components, <code className="font-mono">React.memo</code> /{" "}
+                    <code className="font-mono">forwardRef</code> wrappers, custom{" "}
+                    <code className="font-mono">use*</code> hooks, classes, and TypeScript
+                    interfaces/types.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl surface-card border border-chrome">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-orange-300 font-mono">
+                      Rust Cargo Crates (.rs, Cargo.toml)
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded surface-raised text-slate-400">
+                      Crate Graph
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Maps <code className="font-mono">pub/async/unsafe fn</code>,{" "}
+                    <code className="font-mono">struct</code>,{" "}
+                    <code className="font-mono">enum</code>,{" "}
+                    <code className="font-mono">trait</code>, and{" "}
+                    <code className="font-mono">impl Trait for Type</code> method blocks
+                    across <code className="font-mono">use crate::</code> modules.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl surface-card border border-chrome">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-sky-300 font-mono">
+                      C / C++20 (.c, .cpp, .h, .hpp, CMake)
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded surface-raised text-slate-400">
+                      Header Bridge
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Automatically bridges <code className="font-mono">#include "foo.hpp"</code>{" "}
+                    declarations with out-of-line{" "}
+                    <code className="font-mono">ClassName::method()</code> definitions in{" "}
+                    <code className="font-mono">foo.cpp</code>.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-7 rounded-2xl surface-card border border-chrome shadow-2xl overflow-hidden">
+              <div className="px-4 py-3 surface-raised border-b border-chrome flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  {(["web", "rust", "cpp"] as const).map((stackKey) => (
+                    <button
+                      key={stackKey}
+                      type="button"
+                      onClick={() => setPolyglotTab(stackKey)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        polyglotTab === stackKey
+                          ? "bg-purple-600 text-white shadow-sm"
+                          : "surface-card text-slate-300 hover:text-slate-50 border border-subtle"
+                      }`}
+                    >
+                      {stackKey === "web"
+                        ? "Web (TSX)"
+                        : stackKey === "rust"
+                          ? "Rust (.rs)"
+                          : "C++20 (.cpp)"}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[11px] font-mono text-slate-400">
+                  {activePolyglot.extensions}
+                </span>
+              </div>
+
+              <div className="p-4 sm:p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-bold text-slate-100">
+                      {activePolyglot.label}
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-400">
+                      {activePolyglot.badge} / {activePolyglot.filePath}
+                    </div>
+                  </div>
+                  {onLoadScenario && (
+                    <button
+                      type="button"
+                      onClick={() => onLoadScenario(activePolyglot.scenarioId)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-all cursor-pointer shadow-sm"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Load {activePolyglot.badge} Workspace</span>
+                    </button>
+                  )}
+                </div>
+
+                <CodeSyntaxHighlighter
+                  code={activePolyglot.code}
+                  filePath={activePolyglot.filePath}
+                  maxHeightClass="max-h-64"
+                />
+
+                <div className="p-3 rounded-xl surface-inset border border-subtle space-y-2">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-purple-300 font-bold">
+                    Extracted AST Symbols &amp; Contracts
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {activePolyglot.extractedSymbols.map((sym) => (
+                      <span
+                        key={sym}
+                        className="px-2.5 py-1 rounded-md surface-raised border border-chrome text-xs font-mono text-slate-200"
+                      >
+                        {sym}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-slate-400 pt-1">
+                    {activePolyglot.bridgeHighlight}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -817,22 +1210,27 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <Network className="w-3.5 h-3.5" />
                 <span>Feature Spotlight: DepLenz</span>
               </div>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight mb-4">
+              <h2 className="text-3xl sm:text-4xl font-normal text-slate-50 tracking-tight mb-4">
                 See How Your Whole Codebase Connects — Then Operate Surgically
               </h2>
               <p className="text-sm text-slate-400 leading-relaxed mb-6">
-                DepLenz runs in-browser static analysis on web stacks (
+                DepLenz runs in-browser static analysis across{" "}
+                <strong className="text-slate-200">Web stacks</strong> (
                 <code className="text-purple-400">.ts</code>,{" "}
                 <code className="text-purple-400">.tsx</code>,{" "}
                 <code className="text-purple-400">.js</code>,{" "}
-                <code className="text-purple-400">.jsx</code>,{" "}
                 <code className="text-purple-400">.vue</code>,{" "}
-                <code className="text-purple-400">.svelte</code>) and turns your
-                project into a living map: every function, component, hook and
-                npm package as a node, every call as an edge. Explore freely,
-                then zoom into any symbol for surgical edits — and let Smart
-                Paste turn the model's answer back into complete, parseable
-                files ready to drop into the project.
+                <code className="text-purple-400">.svelte</code>),{" "}
+                <strong className="text-slate-200">Rust crates</strong> (
+                <code className="text-orange-400">.rs</code>), and{" "}
+                <strong className="text-slate-200">C/C++20</strong> (
+                <code className="text-sky-400">.c</code>,{" "}
+                <code className="text-sky-400">.cpp</code>,{" "}
+                <code className="text-sky-400">.h</code>,{" "}
+                <code className="text-sky-400">.hpp</code>) to turn your project
+                into a living architectural map: every function, component,
+                struct, trait, method, and package as a node, every call as an
+                animated flow edge.
               </p>
 
               <div className="space-y-4">
@@ -1305,6 +1703,134 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
+      {/* NEW SECTION: Project Evolution Logs & Interwoven User Action Prompts */}
+      <section
+        id="evolution"
+        className="py-16 border-t border-chrome scroll-mt-16"
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-mono font-medium mb-3">
+              <History className="w-3.5 h-3.5" />
+              <span>Multi-LLM Continuity &amp; Prompt Engineering</span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-normal text-slate-50 tracking-tight mb-3">
+              Token-Efficient Evolution Logs &amp; Interwoven User Action
+              Directives
+            </h2>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              Handing a project over to a fresh AI session usually means losing
+              all context of recent edits—or wasting thousands of tokens pasting
+              raw git diffs. DepLenz solves both problems automatically.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Card 1: Evolution Handover Logs */}
+            <div className="p-6 rounded-2xl surface-card border border-chrome flex flex-col justify-between space-y-5">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400">
+                    1 · Project &amp; Code Evolution Logs
+                  </span>
+                  <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/25">
+                    ~15–25 tokens / entry
+                  </span>
+                </div>
+                <h3 className="text-xl font-bold text-slate-100">
+                  Seamless Context Handover Between LLMs
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Every Smart Paste application, live disk edit, or manual
+                  milestone is recorded in a per-project ring buffer. When
+                  generating your next Surgical Prompt, DepLenz compresses
+                  recent changes into a strict token-budgeted{" "}
+                  <code className="text-cyan-400 font-mono">
+                    &lt;project_evolution_handover&gt;
+                  </code>{" "}
+                  block so the next LLM immediately understands what files,
+                  line deltas, and symbols were just modified.
+                </p>
+              </div>
+
+              <div className="rounded-xl surface-inset border border-subtle p-3.5 font-mono text-[11px] space-y-1.5 overflow-x-auto">
+                <div className="text-cyan-400">
+                  &lt;project_evolution_handover entries="3"
+                  budget_tokens="220"&gt;
+                </div>
+                <div className="text-slate-500">
+                  # Compact chronological log of recent codebase changes:
+                </div>
+                <div className="text-slate-200 whitespace-nowrap">
+                  - [14:22 paste sym:stepSimulation]{" "}
+                  <span className="text-sky-400">M:src/world.cpp(+14/-3)</span>{" "}
+                  <span className="text-purple-300">
+                    @stepSimulation,resolveCollisions
+                  </span>
+                </div>
+                <div className="text-slate-200 whitespace-nowrap">
+                  - [14:09 manual sym:put_batch]{" "}
+                  <span className="text-emerald-400">
+                    M:src/engine.rs(+9/-2)
+                  </span>{" "}
+                  <span className="text-purple-300">@put_batch</span> — Added
+                  WAL fsync guard
+                </div>
+                <div className="text-cyan-400">
+                  &lt;/project_evolution_handover&gt;
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Interwoven User Action Prompt */}
+            <div className="p-6 rounded-2xl surface-card border border-chrome flex flex-col justify-between space-y-5">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-purple-400">
+                    2 · Interwoven User Action Prompt
+                  </span>
+                  <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/25">
+                    Auto-Interwoven XML
+                  </span>
+                </div>
+                <h3 className="text-xl font-bold text-slate-100">
+                  Your Exact Task Directive Woven Into the Code Slice
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Type what you want accomplished—or pick a 1-click preset
+                  (Refactor for clarity, Fix edge-case bugs, Optimize
+                  performance, Add unit tests)—inside the Surgical Prompt panel.
+                  DepLenz automatically interweaves a structured{" "}
+                  <code className="text-purple-400 font-mono">
+                    &lt;user_action_request&gt;
+                  </code>{" "}
+                  block between the extracted symbol contracts and the Smart
+                  Paste output specification.
+                </p>
+              </div>
+
+              <div className="rounded-xl surface-inset border border-subtle p-3.5 font-mono text-[11px] space-y-1.5 overflow-x-auto">
+                <div className="text-purple-400">
+                  &lt;user_action_request priority="primary"&gt;
+                </div>
+                <div className="text-slate-200">
+                  Task: Add sub-stepping stability clamp when dt &gt; 0.016s
+                  without altering upstream PhysicsWorld::stepSimulation caller
+                  signatures.
+                </div>
+                <div className="text-slate-400">
+                  Constraints: Preserve all 3 upstream callers &amp; return
+                  complete files via Smart Paste markers.
+                </div>
+                <div className="text-purple-400">
+                  &lt;/user_action_request&gt;
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Feature Spotlight: Smart Paste */}
       <section
         id="smart-paste"
@@ -1318,7 +1844,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <ClipboardPaste className="w-3.5 h-3.5" />
                 <span>Feature Spotlight: Smart Paste</span>
               </div>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight mb-4">
+              <h2 className="text-3xl sm:text-4xl font-normal text-slate-50 tracking-tight mb-4">
                 AI Answers That Paste Straight Back Into Your Codebase
               </h2>
               <p className="text-sm text-slate-400 leading-relaxed mb-6">
@@ -1592,7 +2118,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <Code2 className="w-3.5 h-3.5" />
                 <span>Feature Spotlight: CodeFile Analyzer</span>
               </div>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight mb-4">
+              <h2 className="text-3xl sm:text-4xl font-normal text-slate-50 tracking-tight mb-4">
                 Structured Code Bundles for LLMs, Audits &amp; Reviews
               </h2>
               <p className="text-sm text-slate-400 leading-relaxed mb-6">
@@ -1770,7 +2296,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <ShieldAlert className="w-3.5 h-3.5 text-warn" />
                   <span>Performance Guard</span>
                 </div>
-                <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-50 tracking-tight">
+                <h3 className="text-2xl sm:text-3xl font-normal text-slate-50 tracking-tight">
                   Never Let <code className="text-warn">node_modules</code>{" "}
                   Crash Your Browser
                 </h3>
@@ -1804,7 +2330,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           <h2 className="text-xs font-bold uppercase tracking-widest text-accent mb-2">
             Seamless Workflow
           </h2>
-          <p className="text-3xl font-extrabold text-slate-50 tracking-tight mb-12">
+          <p className="text-3xl font-normal text-slate-50 tracking-tight mb-12">
             3 Simple Steps from Folder to Export
           </p>
 
@@ -1852,6 +2378,79 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
+      {/* Built-In Comprehensive Documentation & Keyword Search Banner */}
+      {onOpenDocumentation && (
+        <section
+          id="docs-preview"
+          className="py-16 surface-section border-t border-chrome"
+        >
+          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="p-8 rounded-3xl surface-card border border-chrome shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+              <div className="space-y-3 max-w-2xl">
+                <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-mono font-medium">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Built-In Dual-Audience Encyclopedia</span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-normal text-slate-50 tracking-tight">
+                  High-Level User Manual + Deep-Dive Engineering Reference
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+                  Explore our complete built-in documentation covering every
+                  workflow for everyday users and deep architectural specs for
+                  developers (monorepo topology, polyglot AST scanners, C/C++
+                  header bridging, Rust N-API Rayon engine, 60fps direct-DOM SVG
+                  graph math, and security invariants). Click any keyword below
+                  to search directly:
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5 pt-2">
+                  {[
+                    "DepLenz",
+                    "Rust",
+                    "C++20",
+                    "Header Bridging",
+                    "Smart Paste",
+                    "Evolution Log",
+                    "Collision",
+                    "Light Mode",
+                    "Security",
+                  ].map((kw) => (
+                    <button
+                      key={kw}
+                      type="button"
+                      onClick={() => onOpenDocumentation(kw, "all")}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] border border-chrome text-xs font-mono text-slate-200 hover:text-purple-300 transition-colors cursor-pointer"
+                    >
+                      <Search className="w-3 h-3 text-purple-400" />
+                      <span>{kw}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row lg:flex-col gap-3 shrink-0 w-full lg:w-auto">
+                <button
+                  type="button"
+                  onClick={() => onOpenDocumentation("", "user")}
+                  className="flex items-center justify-center space-x-2 px-5 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition-all shadow-sm cursor-pointer"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>Open High-Level User Guide</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenDocumentation("", "developer")}
+                  className="flex items-center justify-center space-x-2 px-5 py-3 rounded-xl surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-100 border border-chrome font-semibold text-xs transition-all cursor-pointer"
+                >
+                  <Terminal className="w-4 h-4 text-purple-400" />
+                  <span>Open Developer Deep Dive</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Footer */}
       <footer className="mt-auto py-10 surface-section border-t border-chrome text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1864,6 +2463,16 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
 
           <div className="flex items-center space-x-6 text-slate-400">
+            {onOpenDocumentation && (
+              <button
+                type="button"
+                onClick={() => onOpenDocumentation()}
+                className="flex items-center space-x-1.5 hover:text-purple-300 transition-colors font-semibold text-purple-300 cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Documentation</span>
+              </button>
+            )}
             <a
               href={GITHUB_REPO_URL}
               target="_blank"
@@ -1877,14 +2486,14 @@ export const HomePage: React.FC<HomePageProps> = ({
             <button
               type="button"
               onClick={onLoadSample}
-              className="hover:text-purple-300 transition-colors"
+              className="hover:text-purple-300 transition-colors cursor-pointer"
             >
               Demo Project
             </button>
             <button
               type="button"
               onClick={onOpenFolderPicker}
-              className="hover:text-purple-300 transition-colors"
+              className="hover:text-purple-300 transition-colors cursor-pointer"
             >
               Open Folder
             </button>

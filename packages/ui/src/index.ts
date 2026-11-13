@@ -12,6 +12,8 @@ export { DepLenzView } from "./DepLenzView";
 export { DesktopHeader } from "./DesktopHeader";
 export { DesktopLobby } from "./DesktopLobby";
 export { DirectoryTreeView } from "./DirectoryTreeView";
+export { DocumentationView } from "./DocumentationView";
+export type { DocumentationViewProps } from "./DocumentationView";
 export { ExclusionWarningModal } from "./ExclusionWarningModal";
 export { FilePreviewModal } from "./FilePreviewModal";
 export { FlatFilesView } from "./FlatFilesView";

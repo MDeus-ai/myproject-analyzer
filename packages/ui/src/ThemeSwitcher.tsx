@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Palette, Check, Sun, Moon } from "lucide-react";
+import { Palette, Check, Sun, Moon, Type } from "lucide-react";
 import {
   APP_THEMES,
   applyTheme,
@@ -8,12 +8,18 @@ import {
   getSavedAppearance,
   swatchBackground,
   AppearanceMode,
+  FONT_STYLE_OPTIONS,
+  FontStyleId,
+  getSavedFontStyle,
+  getSavedFontSize,
+  applyTypographySettings,
 } from "@myproject/core/themes";
 
 /**
  * Dropdown that lets users re-skin the whole application: light/dark
- * appearance plus one of the predefined brand color palettes.
- * Both selections are persisted to localStorage.
+ * appearance, predefined brand color palettes, and font family (defaulting
+ * to full-width IBM Plex Sans).
+ * Selections are persisted to localStorage.
  */
 export const ThemeSwitcher: React.FC = () => {
   const [activeThemeId, setActiveThemeId] = useState<string>(() =>
@@ -21,6 +27,9 @@ export const ThemeSwitcher: React.FC = () => {
   );
   const [appearance, setAppearance] = useState<AppearanceMode>(() =>
     getSavedAppearance(),
+  );
+  const [fontStyleId, setFontStyleId] = useState<FontStyleId>(() =>
+    getSavedFontStyle(),
   );
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -50,6 +59,11 @@ export const ThemeSwitcher: React.FC = () => {
     setAppearance(mode);
   };
 
+  const handleSelectFontStyle = (nextFont: FontStyleId) => {
+    applyTypographySettings(nextFont, getSavedFontSize());
+    setFontStyleId(nextFont);
+  };
+
   const activeTheme =
     APP_THEMES.find((t) => t.id === activeThemeId) ?? APP_THEMES[0];
 
@@ -60,7 +74,7 @@ export const ThemeSwitcher: React.FC = () => {
         onClick={() => setIsOpen((open) => !open)}
         aria-label="Change theme and appearance"
         aria-expanded={isOpen}
-        className="flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-slate-100 hover:bg-[var(--surface-hover)] transition-colors border border-subtle"
+        className="flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-slate-100 hover:bg-[var(--surface-hover)] transition-colors border border-subtle cursor-pointer"
         title={`Theme: ${activeTheme.name} (${appearance} mode)`}
       >
         <Palette className="w-3.5 h-3.5 text-accent" />
@@ -72,7 +86,7 @@ export const ThemeSwitcher: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-1.5rem)] rounded-2xl surface-card border border-chrome shadow-2xl shadow-black/50 z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-1.5rem)] rounded-2xl surface-card border border-chrome shadow-2xl shadow-black/50 z-50 overflow-hidden">
           {/* Appearance toggle */}
           <div className="px-3 pt-3 pb-2">
             <span className="block px-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
@@ -82,7 +96,7 @@ export const ThemeSwitcher: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleAppearance("light")}
-                className={`flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
+                className={`flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                   appearance === "light"
                     ? "chip-accent"
                     : "surface-raised border-chrome text-slate-400 hover:text-slate-200"
@@ -94,7 +108,7 @@ export const ThemeSwitcher: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleAppearance("dark")}
-                className={`flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
+                className={`flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                   appearance === "dark"
                     ? "bg-purple-600/15 border-purple-500/40 text-accent"
                     : "surface-raised border-chrome text-slate-400 hover:text-slate-200"
@@ -106,13 +120,54 @@ export const ThemeSwitcher: React.FC = () => {
             </div>
           </div>
 
+          {/* Font Family selector */}
+          <div className="px-3 pb-1 pt-1 border-t border-subtle">
+            <span className="flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 mt-1">
+              <Type className="w-3 h-3 text-purple-400" />
+              <span>Font Family</span>
+            </span>
+          </div>
+          <div className="px-2 pb-2 space-y-1 max-h-40 overflow-y-auto">
+            {FONT_STYLE_OPTIONS.map((fontOpt) => {
+              const isActive = fontOpt.id === fontStyleId;
+              return (
+                <button
+                  key={fontOpt.id}
+                  type="button"
+                  onClick={() => handleSelectFontStyle(fontOpt.id)}
+                  className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl text-left transition-all cursor-pointer ${
+                    isActive
+                      ? "chip-accent border"
+                      : "border border-transparent hover:bg-[var(--surface-hover)]"
+                  }`}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={`block text-xs font-semibold ${
+                        isActive ? "text-accent" : "text-slate-200"
+                      }`}
+                    >
+                      {fontOpt.name}
+                    </span>
+                    <span className="block text-[10px] text-slate-500 truncate">
+                      {fontOpt.description}
+                    </span>
+                  </span>
+                  {isActive && (
+                    <Check className="w-3.5 h-3.5 text-accent shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Palette list */}
           <div className="px-3 pb-1 pt-1 border-t border-subtle">
             <span className="block px-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 mt-1">
               Color Palette
             </span>
           </div>
-          <div className="px-2 pb-2 space-y-1 max-h-72 overflow-y-auto">
+          <div className="px-2 pb-2 space-y-1 max-h-56 overflow-y-auto">
             {APP_THEMES.map((theme) => {
               const isActive = theme.id === activeThemeId;
               return (
@@ -120,7 +175,7 @@ export const ThemeSwitcher: React.FC = () => {
                   key={theme.id}
                   type="button"
                   onClick={() => handleSelectTheme(theme.id)}
-                  className={`w-full flex items-center space-x-3 p-2 rounded-xl text-left transition-all ${
+                  className={`w-full flex items-center space-x-3 p-2 rounded-xl text-left transition-all cursor-pointer ${
                     isActive
                       ? "chip-accent border"
                       : "border border-transparent hover:bg-[var(--surface-hover)]"

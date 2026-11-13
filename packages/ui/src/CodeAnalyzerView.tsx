@@ -15,6 +15,7 @@ import {
   Square,
   FileText,
   ShieldAlert,
+  X,
 } from "lucide-react";
 import { ProcessedFile } from "@myproject/core/types";
 import {
@@ -152,6 +153,7 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
   const [includeLineNumbers, setIncludeLineNumbers] = useState(false);
   const [addTableOfContents, setAddTableOfContents] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [isSecretBannerDismissed, setIsSecretBannerDismissed] = useState(false);
 
   // Reset the selection to defaults whenever a different project is loaded
   // while this view is mounted (Open Folder / Sample from the header) —
@@ -163,6 +165,7 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
       if ((f.meta.isCode || f.textContent) && !f.isLock) initial.add(f.id);
     });
     setSelectedIds(initial);
+    setIsSecretBannerDismissed(false);
   }, [analyzedFiles]);
 
   const filteredFiles = useMemo(() => {
@@ -458,12 +461,41 @@ export const CodeAnalyzerView: React.FC<CodeAnalyzerViewProps> = ({
       </div>
 
       {/* Secrets warning banner — only when secret files are in the selection */}
-      {selectedSecretFiles.length > 0 && (
-        <div className="bg-danger-soft border-b border-danger px-4 py-2 flex items-center space-x-2 text-xs text-danger">
-          <ShieldAlert className="w-4 h-4 text-danger shrink-0" />
-          <span className="leading-relaxed">
-            <strong>Heads up:</strong> {getSecretWarning(selectedSecretFiles)}
-          </span>
+      {selectedSecretFiles.length > 0 && !isSecretBannerDismissed && (
+        <div className="bg-danger-soft border-b border-danger px-4 py-2 flex items-center justify-between gap-3 text-xs text-danger">
+          <div className="flex items-center space-x-2 min-w-0">
+            <ShieldAlert className="w-4 h-4 text-danger shrink-0" />
+            <span className="leading-relaxed">
+              <strong>Heads up:</strong> {getSecretWarning(selectedSecretFiles)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedIds((prev) => {
+                  const next = new Set(prev);
+                  for (const f of analyzedFiles) {
+                    if (isSecretFile(f.name)) next.delete(f.id);
+                  }
+                  return next;
+                });
+              }}
+              className="px-2.5 py-1 rounded-md bg-rose-500/20 hover:bg-rose-500/30 border border-danger text-danger font-semibold transition-colors cursor-pointer whitespace-nowrap"
+            >
+              Deselect Secrets
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSecretBannerDismissed(true)}
+              aria-label="Close secrets warning"
+              data-testid="close-analyzer-secrets-warning"
+              title="Close warning"
+              className="p-1 rounded-md text-danger hover:bg-rose-500/20 transition-colors cursor-pointer shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 

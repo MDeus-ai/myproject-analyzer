@@ -4,407 +4,382 @@
 [![React: 19](https://img.shields.io/badge/React-19.0-61dafb.svg)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6.svg)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38bdf8.svg)](https://tailwindcss.com/)
-[![Vite](https://img.shields.io/badge/Vite-8.x-646cff.svg)](https://vitejs.dev/)
-[![GitHub Repo](https://img.shields.io/badge/GitHub-MDeus--ai%2Fmyproject--analyzer-181717.svg?logo=github)](https://github.com/MDeus-ai/myproject-analyzer)
-[![Privacy: 100% In-Browser](https://img.shields.io/badge/Privacy-100%25_In--Browser_Zero_Uploads-emerald.svg)](#-privacy--zero-server-guarantee)
+[![Polyglot AST](https://img.shields.io/badge/Polyglot_AST-Web_%7C_Rust_%7C_C%2FC%2B%2B20-f97316.svg)](#-polyglot-static-analysis-engine-web-rust--cc20)
+[![Native Engine](https://img.shields.io/badge/Native_Engine-Electron_%2B_Rust_N--API-10b981.svg)](#-monorepo-architecture--native-rust-acceleration)
+[![Privacy: 100% Local](https://img.shields.io/badge/Privacy-100%25_Local_Zero_Uploads-emerald.svg)](#-privacy--security-invariants)
 
-A desktop-grade, privacy-first codebase analysis, directory flattening, and asset export workstation built with **React 19**, **TypeScript**, and **Tailwind CSS v4**.
+**MyProject Analyzer** is a privacy-first, polyglot codebase analysis, directory flattening, dependency mapping, and surgical AI prompt engineering workstation built for both the **Web Browser** and **Native Desktop (Electron + Rust N-API)**.
 
-**MyProject Analyzer** solves the recurring friction developers face when inspecting, documenting, archiving, or sharing nested folder structures. It flattens deeply nested subdirectories into root-level files with intelligent collision handling, generates publication-grade hierarchy structure PDFs with **zero Unicode font corruption**, exports 2x retina images, bundles multi-file codebases for LLM prompts across five structured formats, and protects browser memory with automatic dependency and secrets shielding.
+It ingests any local repository—across **Web stacks** (`.ts`, `.tsx`, `.js`, `.jsx`, `.vue`, `.svelte`), **Rust Cargo crates** (`.rs`, `Cargo.toml`), and **C/C++20 translation units** (`.c`, `.cpp`, `.cc`, `.h`, `.hpp`, `CMakeLists.txt`)—and projects a single in-memory source of truth across six synchronized workspace lenses:
 
-Everything runs **100% locally in your browser** via the HTML5 File System Access API and Web Workers. No files, code, or metadata are ever uploaded to any server.
-
----
-
-## 📑 Table of Contents
-
-- [✨ Key Features](#-key-features)
-  - [1. 🗂️ Flat File Stripper & Directory Flattening](#1-️-flat-file-stripper--directory-flattening)
-  - [2. 🌲 Interactive Directory Tree Visualizer](#2--interactive-directory-tree-visualizer)
-  - [3. 📄 Structure PDF Architect (WinAnsi-Safe ASCII Engine)](#3--structure-pdf-architect-winansi-safe-ascii-engine)
-  - [4. 🖼️ High-Res Retina Image Exporter (PNG & JPEG)](#4-️-high-res-retina-image-exporter-png--jpeg)
-  - [5. 💻 CodeFile Analyzer & LLM Prompt Bundler](#5--codefile-analyzer--llm-prompt-bundler)
-  - [6. 🛡️ Multi-Layer Auto-Shield & Secrets Detection](#6-️-multi-layer-auto-shield--secrets-detection)
-  - [7. 📊 Deep Analytics & Extension Auditing](#7--deep-analytics--extension-auditing)
-  - [8. 🎨 Dual Appearance & Six Curated Themes](#8--dual-appearance--six-curated-themes)
-- [🔒 Privacy & Zero-Server Guarantee](#-privacy--zero-server-guarantee)
-- [🔄 How It Works (Processing Pipeline)](#-how-it-works-processing-pipeline)
-- [🏛️ Software Architecture & Project Structure](#️-software-architecture--project-structure)
-  - [Directory Tree Breakdown](#directory-tree-breakdown)
-  - [Core Modules & Responsibilities](#core-modules--responsibilities)
-- [🚀 Quickstart & Development](#-quickstart--development)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Running the Development Server](#running-the-development-server)
-  - [Running Unit Tests](#running-unit-tests)
-  - [Linting & Type Checking](#linting--type-checking)
-  - [Production Build](#production-build)
-- [⌨️ Keyboard Shortcuts](#️-keyboard-shortcuts)
-- [🤝 Contributing & GitHub Repository](#-contributing--github-repository)
-- [📄 License](#-license)
+1. **Flat File Stripper (`Files`)** — Strips nested subdirectories into a flat namespace with three deterministic collision strategies (`Auto-number`, `Prefix-path`, `Overwrite`) and 1-click Flat ZIP export.
+2. **Interactive Hierarchy Tree (`Tree`)** — Collapsible directory tree with recursive byte/file rollups, domain category filters, and Unicode/ASCII clipboard export.
+3. **Structure PDF & Retina Image Architect (`PDF & Image`)** — Multi-page vector PDFs built with a **WinAnsi-Safe ASCII Connector Engine** (zero `% % %` glyph corruption) plus 2× high-DPI PNG/JPEG exports.
+4. **Codebase Analytics & Collision Audit (`Stats`)** — Extension distribution meters, heaviest file rankings, and full path provenance logs for every flattened collision.
+5. **CodeFile Analyzer (`Analyzer`)** — Strict 3-part metadata bundler exporting selected modules across **6 LLM-ready formats** (`Standard`, `Compact`, `Markdown`, `XML`, `JSONL`, `JSON`) with live token budgets.
+6. **DepLenz (`DepLenz`)** — Polyglot static AST analyzer, **60fps Direct-DOM SVG Dependency Map** with module cluster bounding boxes, **Surgical AI Prompt Extractor** with interwoven `<user_action_request>` directives, **Token-Efficient Project Evolution Handover Logs** (`<project_evolution_handover>`), and **Smart Paste 5-Stage Verifier & Re-Integrator**.
 
 ---
 
-## ✨ Key Features
+## 🧭 Table of Contents
 
-### 1. 🗂️ Flat File Stripper & Directory Flattening
-
-When uploading datasets to flat cloud buckets (Amazon S3, Google Cloud Storage), running batch analysis scripts, or feeding legacy tools, nested subfolders create operational friction. The Flat File Stripper extracts every file across all inner directories and places them into a single, flat root namespace.
-
-- **Recursive Traversal**: Ingests folders via native browser directory picker (`showDirectoryPicker`) or HTML5 drag-and-drop (`webkitdirectory` / `webkitGetAsEntry`).
-- **Three Intelligent Collision Resolution Strategies**:
-  - `Auto-number (enumerate)`: Preserves clean base names and appends sequential numbering before the extension (e.g., `Button.tsx`, `Button (1).tsx`, `Button (2).tsx`).
-  - `Prefix-path (prefix-path)`: Replaces directory slashes with underscores, encoding directory provenance directly into the filename (e.g., `src_components_Button.tsx`, `src_icons_Button.tsx`).
-  - `Overwrite (overwrite)`: Retains only the most recently traversed file instance, discarding duplicates while tracking replacement tallies.
-- **One-Click Flat ZIP Download**: Generates a flat `.zip` archive entirely in browser memory via JSZip (`<folder-name>_flat.zip`), containing zero subdirectories.
-- **Path Provenance Audit**: Retains original relative paths in memory so you can inspect where each flattened file originated.
-
----
-
-### 2. 🌲 Interactive Directory Tree Visualizer
-
-An interactive hierarchy explorer designed for instant codebase comprehension, architectural documentation, and structural navigation.
-
-- **Recursive Rollup Calculations**: Automatically aggregates child item counts and cumulative byte sizes for every branch, rolling up from leaf files to the root folder.
-- **Depth Analysis**: Calculates maximum nesting depth across the entire project.
-- **Search & Filter with Branch Highlighting**: Filter through thousands of files in real time with branch highlighting.
-- **Category Filter Pills**: Toggle visibility for specific file domains:
-  - `Code` (`.ts`, `.tsx`, `.js`, `.py`, `.go`, `.rs`, `.java`, etc.)
-  - `Docs` (`.md`, `.txt`, `.pdf`, `.docx`, etc.)
-  - `Images` (`.png`, `.jpg`, `.svg`, `.webp`, etc.)
-  - `Data` (`.json`, `.csv`, `.sql`, `.xml`, etc.)
-  - `Config` (`.yaml`, `.toml`, `.env`, `.ini`, etc.)
-- **One-Click ASCII & Unicode Copy**: Copy clean tree text formatted with standard Unicode box characters (`├──`, `└──`) or PDF-safe ASCII connectors directly to your clipboard.
+1. [📚 Built-In & Repository Documentation Encyclopedia](#-built-in--repository-documentation-encyclopedia)
+2. [🖥️ Web Edition vs. Native Desktop Edition](#️-web-edition-vs-native-desktop-edition)
+3. [🔬 Core Capabilities & The Six Workspace Lenses](#-core-capabilities--the-six-workspace-lenses)
+   - [1. Flat File Stripper & Collision Resolution Engine](#1-flat-file-stripper--collision-resolution-engine)
+   - [2. Interactive Hierarchy Tree Visualizer](#2-interactive-hierarchy-tree-visualizer)
+   - [3. Structure PDF Architect & 2× Retina Image Exporter](#3-structure-pdf-architect--2-retina-image-exporter)
+   - [4. Codebase Analytics & Collision Provenance Audit](#4-codebase-analytics--collision-provenance-audit)
+   - [5. CodeFile Analyzer & 6-Format LLM Bundler](#5-codefile-analyzer--6-format-llm-bundler)
+   - [6. DepLenz: 60fps Polyglot Call Graph & Subsystem Analyzer](#6-deplenz-60fps-polyglot-call-graph--subsystem-analyzer)
+4. [🦀 Polyglot Static Analysis Engine (Web, Rust & C/C++20)](#-polyglot-static-analysis-engine-web-rust--cc20)
+5. [🤖 AI Engineering Workflow: User Action Directives, Evolution Logs & Smart Paste](#-ai-engineering-workflow-user-action-directives-evolution-logs--smart-paste)
+   - [Surgical Prompt Extractor & Two-Step Plan Mode](#surgical-prompt-extractor--two-step-plan-mode)
+   - [Interwoven User Action Prompts (`<user_action_request>`)](#interwoven-user-action-prompts-user_action_request)
+   - [Token-Efficient Project Evolution & Handover Logs (`<project_evolution_handover>`)](#token-efficient-project-evolution--handover-logs-project_evolution_handover)
+   - [Smart Paste 5-Stage Verifier & Disk/ZIP Re-Integration](#smart-paste-5-stage-verifier--diskzip-re-integration)
+6. [🛡️ Multi-Layer Auto-Shield, Hierarchical `.gitignore` & Dismissible Warnings](#️-multi-layer-auto-shield-hierarchical-gitignore--dismissible-warnings)
+7. [🎨 Design System: WCAG AA Light/Dark Modes, 6 Palettes & Typography](#-design-system-wcag-aa-lightdark-modes-6-palettes--typography)
+8. [🏛️ Monorepo Architecture & Native Rust Acceleration](#️-monorepo-architecture--native-rust-acceleration)
+   - [Workspace Topology](#workspace-topology)
+   - [End-to-End Processing Pipeline](#end-to-end-processing-pipeline)
+   - [File-by-File Module Reference](#file-by-file-module-reference)
+9. [🔒 Privacy & Security Invariants](#-privacy--security-invariants)
+10. [🚀 Quickstart, Testing & Production Builds](#-quickstart-testing--production-builds)
+11. [⌨️ Global Keyboard Shortcuts & URL Flags](#️-global-keyboard-shortcuts--url-flags)
+12. [📄 License](#-license)
 
 ---
 
-### 3. 📄 Structure PDF Architect (WinAnsi-Safe ASCII Engine)
+## 📚 Built-In & Repository Documentation Encyclopedia
 
-Traditional PDF generators fail when rendering directory trees because standard PDF viewers (Apple Preview, Adobe Acrobat, Chrome PDF) embed standard Type 1 / WinAnsi fonts (`Courier`, `Helvetica`, `Times`) that do not contain Unicode box-drawing glyphs (`├──`, `└──`, `│`). In standard tools, this produces garbled `% % %`, `???`, or blank tofu squares.
+MyProject Analyzer ships with a **12-Chapter, 45-Section Dual-Audience Documentation Encyclopedia** both **built directly into the software** (click **Documentation** in the top navigation bar or press `/`) and mirrored inside the repository under [`/docs/`](./docs/README.md):
 
-**MyProject Analyzer** solves this at the architectural level:
-
-- **WinAnsi-Safe ASCII Connector Engine**: Generates tree branches using `|-- `, `\-- `, and `|   ` characters guaranteed to render crisp vector lines on any PDF viewer, mobile device, or physical printer without font substitution errors.
-- **Four-Section Document Structure**:
-  1. **Executive Metrics Cards**: Total file count, subfolder tally, aggregate disk footprint, and maximum nesting depth.
-  2. **ASCII Hierarchy Tree**: Clean, typography-tuned tree branch layout with customizable fonts (`mono`, `sans`, `serif`) and point sizes.
-  3. **Complete Item Inventory Table**: Auto-paginated table built with `jspdf-autotable`, sorting files by relative path with extensions, human-readable byte sizes, and modification timestamps.
-  4. **Dynamic Header & Footer**: Page numbers (`Page X of Y`), project metadata, generation timestamp, and configurable margins.
-- **Four Accent Themes**: Customize PDF branding with Blue, Indigo, Emerald, or Amber palettes.
-- **Interactive Live Preview**: Preview the exact multi-page document layout in real time before triggering the vector download.
-
----
-
-### 4. 🖼️ High-Res Retina Image Exporter (PNG & JPEG)
-
-Export high-DPI raster images of your project architecture for GitHub READMEs, architecture review documents, Slack channels, or presentations.
-
-- **SVG ForeignObject Rendering**: Renders modern Tailwind CSS v4 `oklch()` color spaces accurately without color clipping.
-- **2x Retina Resolution**: Generates 2x pixel-density PNG and JPEG images for crystal-clear readability on high-resolution displays.
-- **Clean Document Isolation**: Renders an isolated, pure white document canvas even when the application is running in Dark Mode.
+| Guide / ADR | Audience | Summary |
+|---|---|---|
+| **[`docs/README.md`](./docs/README.md)** | Everyone & Developers | Master documentation index, 12-chapter table of contents, and architecture map |
+| **[`docs/01-high-level-user-guide.md`](./docs/01-high-level-user-guide.md)** | High-Level Users | Chapters 01–04: Ingestion workflows, Web vs. Desktop Lobby, Auto-Shield, Dismissible Warnings, Files, Tree, Vector PDF, Stats & CodeFile Analyzer |
+| **[`docs/02-deplenz-smart-paste-and-evolution.md`](./docs/02-deplenz-smart-paste-and-evolution.md)** | Users & AI Engineers | Chapters 05–06: DepLenz 60fps map, polyglot symbols, Surgical Prompts, `<user_action_request>`, `<project_evolution_handover>`, and Smart Paste |
+| **[`docs/03-monorepo-architecture-and-platform-bridge.md`](./docs/03-monorepo-architecture-and-platform-bridge.md)** | Technical Developers | Chapters 07–08: Monorepo package graph, `PlatformBridge` contract, Electron security model, and file-by-file codebase reference |
+| **[`docs/04-polyglot-ast-and-rust-engine.md`](./docs/04-polyglot-ast-and-rust-engine.md)** | Systems Engineers | Chapters 09–10: Polyglot AST extraction, C/C++20 Header-to-Source Bridging (`.hpp ↔ .cpp`), and `@myproject/native-rust` N-API Rayon + `tree-sitter` engine |
+| **[`docs/05-ui-design-system-and-performance.md`](./docs/05-ui-design-system-and-performance.md)** | Frontend Engineers | Chapters 11–12: WCAG AA Light/Dark token system, custom dropdown portal architecture, 60fps direct-DOM SVG drag math, and complexity guarantees |
+| **[`docs/adr/0001-monorepo-layout.md`](./docs/adr/0001-monorepo-layout.md)** | Architects | ADR 0001: npm workspaces monorepo (`@myproject/core`, `@myproject/ui`, `@myproject/platform`, `@myproject/native-rust`) |
+| **[`docs/adr/0002-platform-bridge.md`](./docs/adr/0002-platform-bridge.md)** | Architects | ADR 0002: Platform capability contract between browser sandbox and Electron IPC |
+| **[`docs/adr/0003-electron-security-baseline.md`](./docs/adr/0003-electron-security-baseline.md)** | Security Engineers | ADR 0003: Context isolation, sandboxed renderer, path-jail validation, and atomic disk writes |
 
 ---
 
-### 5. 💻 CodeFile Analyzer & LLM Prompt Bundler
+## 🖥️ Web Edition vs. Native Desktop Edition
 
-Preparing codefiles for Large Language Model (LLM) prompts, code reviews, security audits, or documentation requires rigorous metadata and unambiguous delimiters. CodeFile Analyzer automates this workflow:
+Both editions are built from the same TypeScript/React monorepo and automatically adapt their entry shell and capabilities through `@myproject/platform`:
 
-- **Root Relative Location Detection**: Identifies exact paths from the project root (e.g., `src/utils/treeBuilder.ts`).
-- **35+ Language & Format Identifiers**: Recognizes HTML, TSX, TS, JS, JSX, Python, Rust, Go, Java, Kotlin, Swift, C, C++, C#, PHP, Ruby, SQL, Shell/Bash, Dockerfile, YAML, JSON, Markdown, and more.
-- **Strict 3-Part Structured Output**:
-  1. **Top Metadata Banner**: File location, filename, language type, line count, and byte size.
-  2. **Code Body**: Pristine, unmodified source code (with optional line numbering).
-  3. **End Marker**: Explicit delimiter indicating file completion (`END OF FILE: <relative_path>`).
-- **Five Specialized Export Formats**:
-  | Format | Extension | Key Characteristics | Best Used For |
-  |---|---|---|---|
-  | **Standard** | `.txt` | Double-bar ASCII banners, Table of Contents, line counts | Archival, human audits & reviews |
-  | **Compact** | `.txt` | Minimalist `# ---- path ----` headers; up to **~80% fewer tokens** | Tight LLM context windows |
-  | **Markdown** | `.md` | Headings, blockquote metadata, syntax-tagged code fences | GitHub discussions, Notion, documentation |
-  | **XML** | `.xml` | `<file>` tags wrapped in `<![CDATA[...]]>` to prevent JSX/HTML corruption | Claude & structured prompt engineering |
-  | **JSONL** | `.jsonl` | One parseable JSON object per line (metadata record + file records) | LangChain, LlamaIndex & vector ingestion |
-- **Real-Time Token Estimator**: Heuristic tokenizer (~4 characters per token) calculates live token counts for each format so you can choose what fits your model's context window.
-- **Multi-File Combiner Presets**: Select files individually or apply presets (`All Code`, `Frontend Only`, `Backend Only`, `Config & Data`, `Docs & Markdown`).
+| Capability | 🌐 Web Edition (`apps/web`) | 🖥️ Native Desktop Edition (`apps/desktop`) |
+|---|---|---|
+| **Initial Entry Experience** | **Web Landing Page (`HomePage.tsx`)**: Hero dropzone, 1-click polyglot demos (`Web Stack`, `Rust Crate`, `C++20`), interactive feature spotlights, and `Features` dropdown | **Full-Window Native Workbench Lobby (`DesktopLobby.tsx`)**: Zero-margin IDE welcome screen with Recent Projects history, Quick Launch polyglot templates, and live Studio Settings |
+| **Folder Ingestion** | HTML5 `showDirectoryPicker` / recursive `webkitGetAsEntry` drag-and-drop with lazy `Blob` text hydration | Native OS directory dialog + multi-threaded filesystem walker (`fs-walk.ts` / Rust `ignore` crate) |
+| **AST & Search Engine** | In-browser polyglot TypeScript scanner (`depLenz.ts`) | Native Rust N-API addon (`@myproject/native-rust`: `tree-sitter` + `rayon` + SIMD search) with automatic TS fallback |
+| **Live File Watching** | Snapshot-based (`watchSupported: false`) | Real-time OS file watcher (`chokidar`) with 150ms debounced incremental graph updates & automatic Evolution Log entries |
+| **Smart Paste Re-Integration** | Per-file clipboard copy, single-file download, or structured `*_smart_paste.zip` archive | Direct **Apply to Disk** (`applyChanges` via temp-file + atomic `fs.rename` + `.bak` backups) plus ZIP export |
 
 ---
 
-### 6. 🛡️ Multi-Layer Auto-Shield & Secrets Detection
+## 🔬 Core Capabilities & The Six Workspace Lenses
 
-Opening modern web projects often means ingesting `node_modules`, `.git`, or build caches containing tens of thousands of files, which easily freezes browser tabs. Auto-Shield safeguards performance and security:
+### 1. Flat File Stripper & Collision Resolution Engine
+Strips deeply nested subdirectories into a flat root-level file list for flat cloud buckets, archival pipelines, or legacy tooling:
+- **Three Live Collision Strategies**:
+  - `Auto-number (enumerate)` — Appends sequential suffixes before the extension (`index.ts`, `index (1).ts`, `index (2).ts`).
+  - `Prefix-path (prefix-path)` — Encodes full directory provenance into the filename (`src_auth_index.ts`, `src_billing_index.ts`).
+  - `Overwrite (overwrite)` — Retains only the last traversed instance while logging replaced duplicates.
+- **Windowed Virtual Table**: Renders 250 rows per page (`ROW_RENDER_BATCH = 250`) to maintain 60fps scrolling even on repositories with 50,000+ files.
+- **1-Click Flat ZIP Export**: Streams flattened files into `<folder>_flat.zip` via `JSZip` with zero nested folders.
 
-1. **Heavy Directory Traversal Bypass**:
-   Detects 16+ heavy directory types before memory saturation:
-   - Dependencies: `node_modules`, `vendor`
-   - Version Control: `.git`, `.svn`, `.hg`
-   - Build Outputs: `dist`, `build`, `out`, `target`, `.next`, `.nuxt`
-   - Caches & Virtual Envs: `__pycache__`, `.venv`, `env`, `.cache`, `.turbo`, `.idea`, `.vscode`
-2. **Pre-Import Warning Modal**:
-   Presents an interactive checklist showing file counts, paths, and reasons *before* files are loaded into memory. Users can selectively toggle folders or choose "Include Everything".
-3. **Comprehensive `.gitignore` Parser**:
-   Evaluates project `.gitignore` files, supporting wildcards (`*`, `**`), directory trailing slashes (`temp/`), root path anchors (`/build`), and negation overrides (`!important.log`). Removed files are grouped by rule pattern for selective re-inclusion.
-4. **Sensitive Secrets Detector**:
-   Scans filenames and extensions for sensitive credential files:
-   - `.env`, `.env.local`, `.env.production`
-   - Private keys: `id_rsa`, `*.pem`, `*.key`
-   - Certificates: `*.crt`, `*.pfx`, `*.keystore`
-   - API tokens & credentials: `credentials.json`, `serviceAccountKey.json`
-   Flags detected files with warning badges in the desktop header before export.
+### 2. Interactive Hierarchy Tree Visualizer
+- **Recursive Bottom-Up Rollups**: Computes cumulative byte sizes, file counts, and maximum nesting depth for every directory node in $O(N)$.
+- **Domain Category Filter Pills**: Filter by `All`, `Code`, `Docs`, `Images`, `Data`, or `Config` while preserving ancestor branch context.
+- **Unicode & ASCII Tree Copy**: Copy the rendered hierarchy as standard Unicode (`├──`, `└──`) or WinAnsi-safe ASCII (`|--`, `\--`).
 
----
+### 3. Structure PDF Architect & 2× Retina Image Exporter
+Standard PDF viewers (Acrobat, Preview, Chrome PDF) use Type-1 WinAnsi fonts (`Courier`, `Helvetica`, `Times`) that lack Unicode box-drawing glyphs—causing traditional tools to output garbled `% % %` or tofu boxes.
+- **WinAnsi-Safe ASCII Connector Engine**: Renders crisp vector connectors (`|-- `, `\-- `, `|   `) guaranteed to display on every PDF viewer and printer worldwide.
+- **4-Section Publication Layout**: Executive KPI summary cards, vector ASCII hierarchy tree, paginated item inventory table (`jspdf-autotable`), and page headers/footers.
+- **2× Retina PNG/JPEG Export**: Isolated white document sheet rendered at `pixelRatio: 2` via SVG `foreignObject`.
 
-### 7. 📊 Deep Analytics & Extension Auditing
+### 4. Codebase Analytics & Collision Provenance Audit
+- **Extension Distribution Meters**: Visual breakdown of file extensions by item count and disk byte share.
+- **Largest Assets Audit**: Surfaces the heaviest files in the repository to catch accidental binary commits or oversized bundles.
+- **Collision Provenance Table**: Maps every renamed flat filename back to its exact original nested relative path.
 
-Audits your codebase footprint with visual charts and actionable statistics:
+### 5. CodeFile Analyzer & 6-Format LLM Bundler
+Packages selected files or entire subsystems into a strict 3-part structure (Top Metadata Banner → Source Code → `END OF FILE` Delimiter) across **six formats**:
 
-- **Extension Distribution**: Interactive visual meters showing the top file extensions ranked by total file count and aggregate byte volume.
-- **Largest Assets Explorer**: Highlights the heaviest files in the project to identify unoptimized assets, bundled binaries, or oversized logs.
-- **Collision Audit Log**: Detailed breakdown of every filename collision, showing the resulting renamed filename alongside its original nested directory path.
+| Format | Ext | Key Advantage | Ideal Target |
+|---|---|---|---|
+| **Standard** | `.txt` | Double-bar ASCII metadata headers + Table of Contents | Human code audits & archival reviews |
+| **Compact** | `.txt` | Single-line `# ---- path ----` header (**~80% fewer metadata tokens**) | Tight LLM context windows |
+| **Markdown** | `.md` | Fenced syntax-highlighted blocks (` ```tsx `, ` ```rust `, ` ```cpp `) | GitHub issues, PRs, Notion & docs |
+| **XML** | `.xml` | `<file>` nodes wrapped in `<![CDATA[...]]>` (immune to JSX/C++ `<T>` corruption) | Claude & structured XML prompting |
+| **JSONL** | `.jsonl` | One valid JSON object per line (`metadata` header + `file` records) | RAG pipelines, LangChain & vector DBs |
+| **JSON** | `.json` | Single pretty-printed JSON document with project summary & file array | Automated scripts & REST APIs |
 
----
-
-### 8. 🎨 Dual Appearance & Six Curated Themes
-
-Designed with a native desktop workstation aesthetic:
-
-- **Light & Dark Mode**: Seamlessly toggled via `<html data-appearance="light">`, with full CSS variable color inversion and document sheet protection.
-- **Six Accent Palettes**:
-  - `Obsidian`: Professional monochrome zinc/slate chrome
-  - `Electric Indigo`: Vibrant violet and indigo accents
-  - `Emerald Forest`: Clean, deep emerald and teal tones
-  - `Sunset Amber`: Warm amber, orange, and bronze hues
-  - `Rose Quartz`: Elegant rose and crimson styling
-  - `Cyberpunk Cyan`: High-tech neon cyan and electric blue
-- **Zero Flash of Unstyled Content (FOUC)**: Preferences are stored in `localStorage` and restored before the first DOM paint.
+### 6. DepLenz: 60fps Polyglot Call Graph & Subsystem Analyzer
+Turns your codebase into an interactive architectural map (`DepLenzView.tsx`):
+- **60fps Direct-DOM SVG Graph Canvas**: During node dragging, pointer move events mutate the dragged `<g>` transform and incident `<path d="...">` attributes directly via `requestAnimationFrame` without triggering React state re-renders—eliminating drag lag and duplicate ghost boxes on large graphs.
+- **Module Cluster Bounding Boxes**: Groups symbols by top-level directory (`src/components`, `src/engine`, `include/physics`) with translucent bounding boxes and inter-cluster communication badges.
+- **Bi-Directional Blast Radius**: Click any symbol to inspect its **Upstream Callers** (what breaks if you change this signature) and **Downstream Callees** (internal helpers + external packages/crates/headers).
+- **Vector PDF & 2× PNG Graph Export**: Export the full dependency graph + symbol catalog table for architecture reviews.
 
 ---
 
-## 🔒 Privacy & Zero-Server Guarantee
+## 🦀 Polyglot Static Analysis Engine (Web, Rust & C/C++20)
 
-Unlike online file convertors or cloud tree analyzers:
+MyProject Analyzer natively analyzes and syntax-highlights three major engineering ecosystems:
 
-- **Zero Server Uploads**: Every byte is parsed locally using the browser's native `FileReader`, `Blob`, and `DataTransferItemList` APIs.
-- **Zero Network Telemetry**: No analytics trackers, external trackers, or remote telemetry libraries are installed.
-- **Offline Capable**: Once the static web assets are loaded, the entire application functions without an internet connection.
-- **Ephemeral State**: Files exist only in volatile browser memory and are discarded when you close or reload the tab.
+| Ecosystem | Supported Extensions & Manifests | Extracted Symbols & Architectural Contracts |
+|---|---|---|
+| **Web Dev Stacks** | `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue`, `.svelte`, `package.json` | Functions, arrow assignments, React functional components (`PascalCase` + JSX return), `React.memo` / `forwardRef` wrappers, custom `use*` hooks, ES6 classes, and TypeScript `interface` / `type` contracts. |
+| **Rust Crates** | `.rs`, `Cargo.toml` | `pub`/`async`/`const`/`unsafe fn`, `struct`, `enum`, `trait`, and `impl Trait for Type` method blocks (`Type::method`). Resolves `use crate::...`, `super::...`, `self::...`, and `mod` declarations. |
+| **C / C++20 Projects** | `.c`, `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp`, `.hh`, `.hxx`, `CMakeLists.txt`, `Makefile` | `class`, `struct`, `enum class`, `namespace`, free functions, and out-of-line `ClassName::methodName` implementations. Features **Automatic Header-to-Source Bridging** linking `#include "foo.hpp"` callers directly to `foo.cpp` definitions. |
 
 ---
 
-## 🔄 How It Works (Processing Pipeline)
+## 🤖 AI Engineering Workflow: User Action Directives, Evolution Logs & Smart Paste
 
-```text
-┌────────────────────────────────────────────────────────────────────────┐
-│                        1. INGESTION & DISCOVERY                        │
-│    Native File System Access API (showDirectoryPicker) OR HTML5 DnD     │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                        2. AUTO-SHIELD TRAVERSAL                        │
-│  - Heuristic check against 16+ heavy directories (node_modules, .git)  │
-│  - Parse root .gitignore (wildcards, negation, directory anchors)      │
-│  - Scan filenames for sensitive secrets (.env, id_rsa, *.pem)          │
-│  - Pre-Import Warning Modal triggered if exclusions are detected       │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                    3. IN-MEMORY NORMALIZATION                          │
-│  - Transform raw files into ProcessedFile[] collection                 │
-│  - Extract relative paths, extensions, MIME types, byte sizes          │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│               4. HIERARCHY TREE & STATS ROLLUP ENGINE                  │
-│  - Recursively build FolderNode tree structure                         │
-│  - Aggregate cumulative subfolder sizes, item tallies, max depth       │
-│  - Generate WinAnsi-safe ASCII tree connectors                         │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                    5. COLLISION RESOLUTION ENGINE                      │
-│  - Strip nested directory paths to evaluate root namespace collisions  │
-│  - Apply chosen strategy: enumerate, prefix-path, or overwrite         │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       6. MULTI-TARGET EXPORT                           │
-│  ├── In-Memory Flat ZIP: JSZip bundles root files into archive         │
-│  ├── Structure PDF: jsPDF + AutoTable renders multi-page vector doc    │
-│  ├── High-Res Image: html-to-image renders 2x retina PNG/JPEG          │
-│  └── CodeFile Analyzer: Bundles 3-part code across 5 LLM formats       │
-└────────────────────────────────────────────────────────────────────────┘
+### Surgical Prompt Extractor & Two-Step Plan Mode
+Instead of pasting a 20,000-token repository into an LLM when editing a single function, DepLenz slices only:
+1. The **Target Symbol's full implementation** (exact file & line span),
+2. **Upstream Caller Signature Contracts** (signatures that must remain unbroken),
+3. **Downstream Callee Contracts** (helpers available to reuse),
+4. **Two-Step Plan Mode** (optional toggle instructing the LLM to propose a verification plan before emitting code).
+
+### Interwoven User Action Prompts (`<user_action_request>`)
+Inside the Surgical Prompt panel, type your specific task objective—or click a 1-click preset chip (`Refactor for clarity`, `Fix edge-case bugs`, `Optimize performance`, `Add unit tests`, `Modernize types & safety`). DepLenz automatically weaves a structured `<user_action_request priority="primary">` block directly between the symbol context and the Smart Paste output contract:
+
+```xml
+<user_action_request priority="primary">
+Task: Add sub-stepping stability clamp when dt > 0.016s without altering upstream PhysicsWorld::stepSimulation caller signatures.
+Constraints: Preserve all 3 upstream callers & return complete files via Smart Paste markers.
+</user_action_request>
 ```
 
+### Token-Efficient Project Evolution & Handover Logs (`<project_evolution_handover>`)
+When handing a codebase over to a new LLM session, raw git diffs waste thousands of tokens. DepLenz maintains a per-project ring buffer (`evolutionLog.ts`, up to 80 entries persisted in `localStorage`) that records every Smart Paste application, live desktop file-watcher batch, or manual architectural note, and serializes it into a strict token-budgeted block (~15–25 tokens per entry):
+
+```xml
+<project_evolution_handover entries="2" budget_tokens="220">
+# Compact chronological log of recent codebase changes (newest first):
+- [14:22 paste sym:stepSimulation] M:src/world.cpp(+14/-3) @stepSimulation,resolveCollisions
+- [14:09 manual sym:put_batch] M:src/engine.rs(+9/-2) @put_batch — Added WAL fsync guard
+</project_evolution_handover>
+```
+
+### Smart Paste 5-Stage Verifier & Disk/ZIP Re-Integration
+Every Surgical Prompt appends a dependency-aware output contract instructing the LLM to return complete files inside `<<<SMART_PASTE_FILE path="..." action="modify|create|delete">>>` blocks. When you paste the LLM's response into the **Smart Paste Inbox**, DepLenz runs a **5-stage verification pipeline**:
+1. **Protocol & Fence Check** — Extracts blocks and flags truncated snippets or `// ... rest unchanged` placeholders.
+2. **Path Safety & Resolution** — Rejects path traversal (`..`), absolute paths, and null bytes.
+3. **Syntax & Brace Balance Audit** — Runs `scanCodeSyntaxIssues` on the proposed file content before applying.
+4. **Upstream Caller Contract Verification** — Re-parses the new file's AST symbols to verify exported signatures required by upstream callers were not accidentally deleted.
+5. **Line Delta & Marker Tally** — Computes exact `+added / -removed` line deltas and `[SMART-PASTE]` marker counts, ready for **1-Click Apply to Disk** (Desktop) or **Smart Paste ZIP Export** (Web & Desktop).
+
 ---
 
-## 🏛️ Software Architecture & Project Structure
+## 🛡️ Multi-Layer Auto-Shield, Hierarchical `.gitignore` & Dismissible Warnings
 
-### Directory Tree Breakdown
+1. **16+ Heavy Directory Interception**: Automatically detects `node_modules`, `.git`, `target`, `dist`, `build`, `.next`, `__pycache__`, `.venv`, `vendor`, and CMake build folders before memory saturation.
+2. **Hierarchical `.gitignore` Evaluation**: Parses root and nested `.gitignore` files (supporting `*`, `**`, `/anchor`, directory slashes, and `!negation`).
+3. **Secrets & Credential Scanner**: Flags `.env*`, `*.pem`, `*.key`, `id_rsa`, `*.pfx`, and `credentials.json` files before export.
+4. **Dismissible Post-Import Warning Banners**: Every post-import warning banner across the workspace—including the **Auto-Excluded Heavy Folders & `.gitignore` Banner**, **Possible Secrets Detected Banner**, **CodeFile Analyzer Secrets Warning**, and **DepLenz Syntax / Smart Paste Warning Banners**—includes an explicit **Close (`X`) button** so you can dismiss notifications cleanly once reviewed, with automatic reset on the next folder import.
+
+---
+
+## 🎨 Design System: WCAG AA Light/Dark Modes, 6 Palettes & Typography
+
+- **Refined Dual Appearance (`Dark` & `Light` Modes)**: Engineered with semantic CSS custom properties (`--surface-bg`, `--surface-panel`, `--surface-card`, `--border-chrome`) and dedicated WCAG AA high-contrast Light Mode palette overrides (`#0f172a` primary ink, `#334155` secondary text, `#475569` muted labels, crisp `#cbd5e1` borders).
+- **6 Curated Accent Palettes**: `Electric Indigo`, `Obsidian`, `Emerald Forest`, `Sunset Amber`, `Rose Quartz`, and `Cyberpunk Cyan`.
+- **Custom Theme-Aware Dropdowns**: Every selector across the application uses the unified `DropdownSelect` / `surface-popover` architecture—never unstyled native OS `<select>` menus—plus an automatic responsive `More (N)` overflow dropdown in the workspace toolbar.
+
+---
+
+## 🏛️ Monorepo Architecture & Native Rust Acceleration
+
+### Workspace Topology
 
 ```text
 myproject-analyzer/
-├── index.html                   # HTML5 entry point with responsive meta & fonts
-├── package.json                 # Project dependencies, scripts & engine specs
-├── tsconfig.json                # Strict TypeScript configuration
-├── vite.config.ts               # Vite configuration with Tailwind CSS v4 plugin
-├── README.md                    # Comprehensive software documentation
+├── README.md                          # Comprehensive root documentation
+├── package.json                       # npm workspaces root & unified build/test scripts
+├── docs/                              # Full 5-guide documentation encyclopedia + ADRs
+│   ├── README.md                      # Documentation hub & 12-chapter index
+│   ├── 01-high-level-user-guide.md
+│   ├── 02-deplenz-smart-paste-and-evolution.md
+│   ├── 03-monorepo-architecture-and-platform-bridge.md
+│   ├── 04-polyglot-ast-and-rust-engine.md
+│   ├── 05-ui-design-system-and-performance.md
+│   └── adr/                           # Architectural Decision Records (0001–0003)
 │
-└── src/
-    ├── main.tsx                 # React DOM mount point & theme initializer
-    ├── App.tsx                  # Root state manager, view router & modal coordinator
-    ├── index.css                # Global Tailwind CSS imports & theme CSS variables
+├── apps/
+│   ├── web/                           # Vite + React 19 Web Application (Port 3000)
+│   │   └── src/
+│   │       ├── main.tsx               # Web entry point & browser PlatformBridge installer
+│   │       ├── App.tsx                # Root workspace coordinator, router & banner manager
+│   │       └── index.css              # Tailwind CSS v4 + WCAG AA Light/Dark theme tokens
+│   │
+│   └── desktop/                       # Electron Native Desktop Application
+│       ├── electron-builder.yml       # Cross-platform installer config (NSIS, DMG, AppImage)
+│       └── src/
+│           ├── main.ts                # Hardened Electron BrowserWindow & CSP setup
+│           ├── preload.ts             # Context-isolated window.myprojectDesktop bridge
+│           └── main/                  # IPC handlers, fs-walk, chokidar watcher, disk apply
+│
+└── packages/
+    ├── core/                          # Pure TypeScript domain engines (zero React/DOM deps)
+    │   └── src/
+    │       ├── depLenz.ts             # Polyglot AST & dependency graph engine (Web/Rust/C++)
+    │       ├── evolutionLog.ts        # Token-efficient Project Evolution & Handover logger
+    │       ├── documentationData.ts   # 12-chapter, 45-section searchable documentation data
+    │       ├── codeAnalyzer.ts        # 3-part code bundler & 6 LLM export formatters
+    │       ├── pdfGenerator.ts        # WinAnsi-safe ASCII vector PDF architect
+    │       ├── treeBuilder.ts         # O(N) hierarchy tree & byte rollup engine
+    │       ├── collisionResolver.ts   # Deterministic flat namespace collision resolver
+    │       ├── folderReader.ts        # Lazy Blob hydration & hierarchical .gitignore reader
+    │       ├── folderExclusions.ts    # 16+ heavy directory heuristics
+    │       ├── secretsDetector.ts     # Credential & private key filename scanner
+    │       └── sampleProject.ts       # Built-in Web, Rust Crate & C++20 reference projects
     │
-    ├── types/
-    │   └── index.ts             # Domain interfaces (ProcessedFile, FolderNode, etc.)
+    ├── ui/                            # Shared React 19 UI components
+    │   └── src/
+    │       ├── HomePage.tsx           # Web landing page with Features dropdown & spotlights
+    │       ├── DesktopLobby.tsx       # Full-window native desktop workbench lobby
+    │       ├── DesktopHeader.tsx      # Responsive toolbar with More (N) overflow dropdown
+    │       ├── DepLenzView.tsx        # 60fps direct-DOM SVG graph, Surgical AI & Smart Paste
+    │       ├── DocumentationView.tsx  # Dual-audience documentation reader & keyword search
+    │       ├── CodeSyntaxHighlighter.tsx # Polyglot tokenizer (TS/JS, Rust, C/C++20, JSON)
+    │       └── DropdownSelect.tsx     # Portal-backed custom dropdown component
     │
-    ├── utils/                   # Pure logic & algorithmic modules
-    │   ├── folderReader.ts      # Directory traversal (File System Access & Drag-and-Drop)
-    │   ├── folderExclusions.ts  # 16+ heavy directory heuristics & pattern matchers
-    │   ├── gitignoreParser.ts   # .gitignore specification parser (wildcards, negation)
-    │   ├── secretsDetector.ts   # Sensitive credential & secret file scanner
-    │   ├── collisionResolver.ts # 3 namespace flattening collision strategies
-    │   ├── treeBuilder.ts       # Recursive hierarchy builder & ASCII tree generator
-    │   ├── pdfGenerator.ts      # Multi-page vector PDF architect (WinAnsi connectors)
-    │   ├── imageExporter.ts     # 2x high-DPI PNG/JPEG image renderer via SVG filter
-    │   ├── codeAnalyzer.ts      # 3-part code wrapper & 5-format LLM bundler
-    │   ├── zipExporter.ts       # In-memory flat ZIP archive builder (JSZip)
-    │   ├── fileHelpers.ts       # Byte sizing, formatting & category helpers
-    │   ├── themes.ts            # Appearance modes & 6 accent color palettes
-    │   └── sampleProject.ts     # Instant demo fixture project
+    ├── platform/                      # Runtime abstraction layer (Browser vs. Electron)
+    │   └── src/
+    │       ├── types.ts               # PlatformBridge interface & IPC channel contracts
+    │       └── browser-bridge.ts      # HTML5 File System Access & Blob download bridge
     │
-    └── components/              # Modular UI components
-        ├── HomePage.tsx         # Landing page with interactive feature spotlights
-        ├── DesktopHeader.tsx    # macOS-style desktop toolbar, navigation & export menu
-        ├── FolderDropzone.tsx   # Interactive file & directory dropzone
-        ├── FlatFilesView.tsx    # Flattened file viewer with collision controls
-        ├── DirectoryTreeView.tsx# Collapsible hierarchy tree explorer with search
-        ├── PdfArchitectView.tsx # PDF & Image generator preview with options panel
-        ├── PdfCanvasViewer.tsx  # Document canvas preview renderer
-        ├── CodeAnalyzerView.tsx # Multi-file code bundler with live token counts
-        ├── AnalyzerTextPreview.tsx # Formatted code output preview with copy/download
-        ├── AnalyticsView.tsx    # Extension distribution charts & collision audit
-        ├── ExclusionWarningModal.tsx # Pre-import checklist for heavy folders & gitignore
-        ├── FilePreviewModal.tsx # File content & code inspector modal
-        ├── HelpShortcutsModal.tsx    # Keyboard shortcuts & quick documentation modal
-        ├── ImportProgressOverlay.tsx # Traversal progress indicator overlay
-        └── ThemeSwitcher.tsx    # Light/Dark mode & accent palette selector
+    └── native-rust/                   # Optional Rust N-API native accelerator (napi-rs)
+        ├── Cargo.toml                 # tree-sitter (TS/Rust/C/C++), rayon, regex, ignore
+        ├── src/lib.rs                 # Parallel AST parser, SIMD search & Smart Paste verifier
+        └── index.js                   # Automatic native loader with graceful JS fallback
 ```
 
-### Core Modules & Responsibilities
+### End-to-End Processing Pipeline
 
-| Module | Core Responsibility |
+```text
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 1. INGESTION LAYER                                                           │
+│    Web: HTML5 showDirectoryPicker / Drag-and-Drop -> Lazy File Blob handles  │
+│    Desktop: Native OS Dialog -> Multi-threaded fs-walk + Chokidar Watcher    │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 2. AUTO-SHIELD & SECURITY GATE                                               │
+│    • Intercepts 16+ heavy folders (node_modules, target, build, .git, dist)  │
+│    • Evaluates hierarchical .gitignore rules (wildcards, anchors, !negation) │
+│    • Flags sensitive secrets (.env, *.pem, id_rsa) with dismissible banners  │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 3. UNIFIED WORKSPACE PROJECTION (6 SYNCHRONIZED LENSES)                      │
+│    ├── [1] Files      -> O(N) Collision Resolution + Windowed Table + ZIP    │
+│    ├── [2] Tree       -> O(N) Bottom-Up Rollups + Category Filters           │
+│    ├── [3] PDF/Image  -> WinAnsi-Safe ASCII Vector PDF + 2x Retina PNG/JPEG  │
+│    ├── [4] Stats      -> Extension Distribution + Collision Provenance Audit │
+│    ├── [5] Analyzer   -> 3-Part Metadata Wrapper + 6 LLM Formats + Tokens    │
+│    └── [6] DepLenz    -> Polyglot AST (Web/Rust/C++20) + 60fps SVG Map       │
+│                          + <user_action_request> + <project_evolution_log>   │
+│                          + Smart Paste 5-Stage Verifier & Disk/ZIP Apply     │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### File-by-File Module Reference
+
+| Package / File | Responsibility |
 |---|---|
-| `App.tsx` | Central state hub managing loaded files, active view, modal visibility, and scan results. |
-| `folderReader.ts` | Handles non-blocking asynchronous file ingestion via `showDirectoryPicker` or `webkitGetAsEntry`, dispatching progress events. |
-| `collisionResolver.ts` | Resolves duplicate filenames when stripping directory paths, applying `enumerate`, `prefix-path`, or `overwrite`. |
-| `treeBuilder.ts` | Builds nested `FolderNode` trees, computes recursive size rollups, and formats ASCII branch lines. |
-| `pdfGenerator.ts` | Generates vector PDFs using `jspdf` and `jspdf-autotable` with WinAnsi-safe ASCII tree connectors. |
-| `imageExporter.ts` | Converts preview DOM elements into 2x retina PNG/JPEG images via `html-to-image`. |
-| `codeAnalyzer.ts` | Formats files into strict 3-part layouts and generates Standard, Compact, Markdown, XML, and JSONL bundles. |
-| `folderExclusions.ts` | Identifies heavy dependency and build directories to prevent browser thread lockup. |
-| `gitignoreParser.ts` | Evaluates `.gitignore` rules with support for wildcards, path anchors, and negation patterns. |
-| `secretsDetector.ts` | Scans filenames for sensitive credentials (`.env`, private keys, API certificates). |
-| `zipExporter.ts` | Streams flattened files into a root-level ZIP archive via `JSZip` without subfolders. |
+| `packages/core/src/depLenz.ts` | Polyglot symbol extraction (`ts`/`tsx`/`js`/`vue`/`svelte`, `.rs`, `.c`/`.cpp`/`.h`/`.hpp`), C/C++ Header-to-Source bridging, dependency graph construction, Surgical Prompt builder, and Smart Paste parser. |
+| `packages/core/src/evolutionLog.ts` | Per-project ring buffer (`MAX_ENTRIES = 80`) and token-budgeted `<project_evolution_handover>` serializer (~15–25 tokens/entry). |
+| `packages/core/src/documentationData.ts` | 12-chapter, 45-section structured encyclopedia dataset and weighted multi-term search engine (`searchDocumentation`). |
+| `packages/ui/src/DepLenzView.tsx` | 60fps direct-DOM SVG graph canvas, module cluster bounding boxes, Surgical Prompt composer, Evolution Log manager, and Smart Paste Inbox. |
+| `packages/ui/src/DocumentationView.tsx` | Interactive documentation reader with audience filter (`All` / `User Guide` / `Developer Deep Dive`), `Chapter` vs. `Full Manual` mode, and live keyword highlighting. |
+| `packages/native-rust/src/lib.rs` | Native Rust N-API (`napi-rs`) accelerator providing parallel `rayon` + `tree-sitter` AST extraction, SIMD regex search, and 5-stage Smart Paste verification. |
 
 ---
 
-## 🚀 Quickstart & Development
+## 🔒 Privacy & Security Invariants
+
+- **100% Local Processing**: Zero source code, file paths, or telemetry ever leave your machine.
+- **Hardened Electron Baseline (`ADR 0003`)**: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, strict Content Security Policy, and navigation blocking.
+- **Canonical Path-Jail Verification (`safe-path.ts`)**: All desktop IPC file reads and Smart Paste writes resolve `fs.realpath` and verify containment inside the active `watchRoot`—blocking symlink escapes and `../` traversal.
+- **Atomic Disk Writes with `.bak` Backups (`apply-changes.ts`)**: Desktop Smart Paste writes to a sibling temporary file, flushes, atomically renames over the target, and creates timestamped backups under `.myproject-backup/<timestamp>/`.
+
+---
+
+## 🚀 Quickstart, Testing & Production Builds
 
 ### Prerequisites
+- **Node.js** `>= 20.0.0` (Node 22 LTS recommended)
+- **npm** `>= 10.0.0`
+- *(Optional, for rebuilding the native Rust addon)* **Rust Toolchain** (`cargo`, `rustc >= 1.78`)
 
-- [Node.js](https://nodejs.org/) (v18.0 or higher recommended, Node 22 supported)
-- [npm](https://www.npmjs.com/) (v9 or higher)
-
-### Installation
-
-Clone the repository from GitHub:
+### Installation & Local Development
 
 ```bash
-git clone https://github.com/MDeus-ai/myproject-analyzer.git
-cd myproject-analyzer
+# 1. Install all monorepo workspace dependencies
 npm install
-```
 
-### Running the Development Server
-
-Start the local Vite development server:
-
-```bash
+# 2. Start the Web development server on http://localhost:3000
 npm run dev
+
+# 3. (Optional) Launch the Native Desktop Electron app in development mode
+npm run desktop:dev
 ```
 
-Navigate to `http://localhost:3000` in your web browser.
+### Running the Unit Test Suite
 
-### Running Unit Tests
-
-The codebase includes comprehensive unit tests verifying pure logic modules (`codeAnalyzer`, `collisionResolver`, `folderExclusions`, `treeBuilder`) using Node's built-in test runner and `tsx`:
+All core algorithms—including Polyglot AST extraction (Web, Rust, C++20 Header Bridging), Token-Efficient Evolution Logs, Documentation Search, Collision Resolution, `.gitignore` parsing, and CodeFile Analyzer formats—are covered by fast unit tests using Node's native test runner:
 
 ```bash
-npx --yes tsx --test src/utils/codeAnalyzer.test.ts src/utils/collisionResolver.test.ts src/utils/folderExclusions.test.ts src/utils/treeBuilder.test.ts
+# Run core polyglot AST, Evolution Log, and Documentation Encyclopedia tests
+npx tsx --test packages/core/src/depLenz.test.ts packages/core/src/evolutionLog.test.ts packages/core/src/documentationData.test.ts
+
+# Or run the full workspace test suite
+npm test
 ```
 
-All 23 test suites execute in milliseconds.
-
-### Linting & Type Checking
-
-Verify TypeScript compilation and lint rules with zero emit:
+### Type-Checking & Production Build
 
 ```bash
+# Type-check all workspaces (zero emit)
 npm run lint
-```
 
-### Production Build
-
-Generate an optimized static production build in `dist/`:
-
-```bash
+# Build the production Web bundle into dist/
 npm run build
-```
 
-Preview the production build locally:
-
-```bash
-npm run preview
+# Package the Native Desktop installer (NSIS / DMG / AppImage)
+npm run desktop:dist
 ```
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## ⌨️ Global Keyboard Shortcuts & URL Flags
 
-| Shortcut | Action | Description |
+| Shortcut / URL Parameter | Context | Action |
 |---|---|---|
-| <kbd>1</kbd> | Flat Files View | Switch to stripped flat files workspace |
-| <kbd>2</kbd> | Tree Explorer | Switch to interactive hierarchy tree |
-| <kbd>3</kbd> | PDF & Image | Switch to PDF & Image Architect |
-| <kbd>4</kbd> | Analytics | Switch to codebase statistics & collision audit |
-| <kbd>5</kbd> | Code Analyzer | Switch to CodeFile Analyzer & LLM bundler |
-| <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>O</kbd> | Open Folder | Trigger native directory picker dialog |
-| <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>S</kbd> | Export | Open quick export menu |
-| <kbd>?</kbd> | Help | Open keyboard shortcuts and documentation modal |
-| <kbd>Escape</kbd> | Close Modal | Dismiss open modals or overlays |
-
----
-
-## 🤝 Contributing & GitHub Repository
-
-Contributions, issue reports, and feature requests are welcome!
-
-- **GitHub Repository**: [https://github.com/MDeus-ai/myproject-analyzer](https://github.com/MDeus-ai/myproject-analyzer)
-- **Issue Tracker**: [https://github.com/MDeus-ai/myproject-analyzer/issues](https://github.com/MDeus-ai/myproject-analyzer/issues)
-
-To contribute:
-1. Fork the repository on GitHub.
-2. Create a feature branch: `git checkout -b feature/amazing-feature`.
-3. Commit your changes: `git commit -m "Add amazing feature"`.
-4. Run tests and linting: `npx tsx --test src/utils/*.test.ts && npm run lint`.
-5. Push to your branch: `git push origin feature/amazing-feature`.
-6. Open a Pull Request on GitHub.
+| <kbd>1</kbd> – <kbd>6</kbd> | Workspace | Switch between `Files`, `Tree`, `PDF & Image`, `Stats`, `Analyzer`, and `DepLenz` |
+| <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>O</kbd> | Global | Open native project folder picker |
+| <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>S</kbd> | Workspace | Trigger primary export action for the active tab |
+| <kbd>/</kbd> | Documentation | Focus the real-time documentation keyword search bar |
+| <kbd>?</kbd> | Workspace | Open the Keyboard Shortcuts & Quick Help modal |
+| <kbd>Escape</kbd> | Global | Close active modal, dropdown popover, or preview |
+| `?view=docs` | URL Query | Launch directly into the 12-Chapter Documentation Encyclopedia |
+| `?desktop=1` | URL Query | Preview the Full-Window Native Desktop Workbench Lobby in the browser |
 
 ---
 
 ## 📄 License
 
-This project is open-source software licensed under the **[MIT License](https://opensource.org/licenses/MIT)**. Feel free to use it for personal, academic, or commercial applications.
+Distributed under the **[MIT License](https://opensource.org/licenses/MIT)**.

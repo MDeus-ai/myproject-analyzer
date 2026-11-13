@@ -354,7 +354,12 @@ export function getSavedAppearance(): AppearanceMode {
 export const FONT_STYLE_STORAGE_KEY = "myproject-analyzer:font-style";
 export const FONT_SIZE_STORAGE_KEY = "myproject-analyzer:font-size";
 
-export type FontStyleId = "ibm-plex" | "condensed" | "mono" | "system";
+export type FontStyleId =
+  | "ibm-plex"
+  | "plex-hybrid"
+  | "condensed"
+  | "mono"
+  | "system";
 export type FontSizeScale = "sm" | "md" | "lg" | "xl";
 
 export interface FontStyleOption {
@@ -376,8 +381,17 @@ export interface FontSizeOption {
 export const FONT_STYLE_OPTIONS: FontStyleOption[] = [
   {
     id: "ibm-plex",
-    name: "IBM Plex Sans",
-    description: "Engineered technical grotesque with condensed headings",
+    name: "IBM Plex Sans (Default)",
+    description: "Clean full-width IBM Plex Sans across headings, tables & UI",
+    fontSansCss:
+      '"IBM Plex Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    fontDisplayCss:
+      '"IBM Plex Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  },
+  {
+    id: "plex-hybrid",
+    name: "IBM Plex + Condensed",
+    description: "IBM Plex Sans body with condensed display headings",
     fontSansCss:
       '"IBM Plex Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     fontDisplayCss:
@@ -424,6 +438,7 @@ export function getSavedFontStyle(): FontStyleId {
     const val = window.localStorage.getItem(FONT_STYLE_STORAGE_KEY);
     if (
       val === "ibm-plex" ||
+      val === "plex-hybrid" ||
       val === "condensed" ||
       val === "mono" ||
       val === "system"
@@ -640,6 +655,15 @@ export function removeProjectFromHistory(id: string): ProjectHistoryEntry[] {
     // ignore
   }
   return next;
+}
+
+export function clearProjectHistory(): ProjectHistoryEntry[] {
+  try {
+    window.localStorage.removeItem(PROJECT_HISTORY_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+  return [];
 }
 
 /**

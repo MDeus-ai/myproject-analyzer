@@ -21,8 +21,8 @@
     "IBM Plex Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display:
-    "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, -apple-system,
-    "Segoe UI", Roboto, sans-serif;
+    "IBM Plex Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono:
     "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", monospace;
@@ -178,6 +178,11 @@
     --color-slate-950: #020617;
   }
 
+  html {
+    font-size: calc(16px * var(--ui-font-scale, 1));
+    font-family: var(--font-sans);
+  }
+
   body {
     font-family: var(--font-sans);
     user-select: none;
@@ -189,8 +194,9 @@
     transition: background-color 200ms ease;
   }
 
-  /* Display face: every heading uses IBM Plex Sans Condensed.
-     Opt any individual heading back out with class="font-sans". */
+  /* Display face: defaults to full-width IBM Plex Sans (matching the
+     Supabase-style reference typography with clean 400/500 weights)
+     unless a condensed or monospace font style is explicitly chosen. */
   h1,
   h2,
   h3,
@@ -198,6 +204,7 @@
   h5,
   h6 {
     font-family: var(--font-display);
+    letter-spacing: -0.025em;
   }
 }
 
@@ -281,12 +288,15 @@
   );
 }
 
-/* Solid headline — no rainbow gradient. */
+/* Two-tone Supabase-style IBM Plex Sans hero headline:
+   First line in crisp slate-50 (weight 400), second line in muted slate-400 (weight 300). */
 .hero-title-gradient {
-  color: var(--color-slate-50);
+  color: var(--color-slate-400);
+  font-weight: 300;
 }
 :root[data-appearance="light"] .hero-title-gradient {
-  color: var(--color-slate-900);
+  color: var(--color-slate-500);
+  font-weight: 300;
 }
 
 /* Neutral ambience — a soft white haze, not a purple party.

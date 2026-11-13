@@ -17,6 +17,7 @@ import {
   MoreVertical,
   Check,
   Layers,
+  BookOpen,
 } from "lucide-react";
 import {
   FolderAnalysisStats,
@@ -35,6 +36,7 @@ interface DesktopHeaderProps {
   onDownloadPdfClick: () => void;
   onDownloadImageClick?: () => void;
   onHelpClick: () => void;
+  onDocsClick?: () => void;
   onGoHomeClick?: () => void;
   isZipping?: boolean;
   excludedFolders?: ExcludedFolderInfo[];
@@ -376,6 +378,7 @@ interface OverflowMenuProps {
   excludedCount: number;
   onLoadSample: () => void;
   onReviewExclusions?: () => void;
+  onDocs?: () => void;
   onHelp: () => void;
 }
 
@@ -385,6 +388,7 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({
   excludedCount,
   onLoadSample,
   onReviewExclusions,
+  onDocs,
   onHelp,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -470,6 +474,24 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({
               </button>
             )}
 
+            {onDocs && (
+              <button
+                type="button"
+                onClick={() => run(onDocs)}
+                className="w-full flex items-start space-x-3 p-2 rounded-xl hover:bg-[var(--surface-hover)] text-left transition-colors cursor-pointer"
+              >
+                <BookOpen className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+                <span>
+                  <span className="block text-xs font-semibold text-slate-200">
+                    Full Documentation &amp; Search
+                  </span>
+                  <span className="block text-[10px] text-slate-500">
+                    User guide &amp; technical developer deep dive
+                  </span>
+                </span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => run(onHelp)}
@@ -478,10 +500,10 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({
               <HelpCircle className="w-4 h-4 text-accent shrink-0 mt-0.5" />
               <span>
                 <span className="block text-xs font-semibold text-slate-200">
-                  Shortcuts &amp; Documentation
+                  Keyboard Shortcuts
                 </span>
                 <span className="block text-[10px] text-slate-500">
-                  Keyboard guide and feature overview
+                  Quick shortcut reference drawer
                 </span>
               </span>
             </button>
@@ -510,6 +532,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
   onDownloadPdfClick,
   onDownloadImageClick,
   onHelpClick,
+  onDocsClick,
   onGoHomeClick,
   isZipping,
   excludedFolders,
@@ -523,13 +546,13 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
     if (!el) return;
 
     const updateVisibleCount = (width: number) => {
-      if (width >= 1060) {
-        setVisibleTabCount(TABS.length); // All 6 inline
-      } else if (width >= 880) {
-        setVisibleTabCount(4); // 4 inline + More (2)
-      } else if (width >= 720) {
+      if (width >= 1560) {
+        setVisibleTabCount(TABS.length); // All 6 inline on ultra-wide
+      } else if (width >= 1320) {
+        setVisibleTabCount(4); // 4 inline + More (2) on standard desktop (1440px)
+      } else if (width >= 1100) {
         setVisibleTabCount(3); // 3 inline + More (3)
-      } else if (width >= 560) {
+      } else if (width >= 860) {
         setVisibleTabCount(2); // 2 inline + More (4)
       } else {
         setVisibleTabCount(0); // Single compact "Views" dropdown
@@ -675,12 +698,25 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             <span>Sample</span>
           </button>
 
+          {onDocsClick && (
+            <button
+              type="button"
+              onClick={onDocsClick}
+              aria-label="Open full documentation"
+              className="hidden lg:flex items-center space-x-1.5 text-xs px-2.5 py-1.5 rounded-lg surface-raised hover:bg-[var(--surface-raised-hover)] text-slate-200 transition-colors border border-chrome cursor-pointer"
+              title="Open searchable User Guide & Technical Documentation"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-accent" />
+              <span>Docs</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onHelpClick}
             aria-label="Help and shortcuts"
             className="hidden xl:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
-            title="Shortcuts & Documentation"
+            title="Keyboard Shortcuts (?)"
           >
             <HelpCircle className="w-4 h-4" />
           </button>
@@ -713,6 +749,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             excludedCount={excludedCount}
             onLoadSample={onLoadSampleClick}
             onReviewExclusions={onReviewExclusionsClick}
+            onDocs={onDocsClick}
             onHelp={onHelpClick}
           />
         </div>
