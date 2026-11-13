@@ -16,12 +16,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install (all workspaces)
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Rust engine unit tests (cargo test)
         run: cargo test --manifest-path packages/rust-engine/Cargo.toml
@@ -54,12 +53,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install (all workspaces)
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build Windows installer (unsigned)
         env:

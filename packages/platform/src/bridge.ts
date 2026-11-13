@@ -18,6 +18,9 @@ export const DesktopIpc = {
   /** Push channel: main → renderer, batched watch events. */
   watchEvent: "watch:event",
   applyChanges: "fs:applyChanges",
+  engineBuildGraph: "engine:buildGraph",
+  engineSearch: "engine:search",
+  engineEstimateTokens: "engine:estimateTokens",
 } as const;
 
 export interface PickFolderIpcResult {

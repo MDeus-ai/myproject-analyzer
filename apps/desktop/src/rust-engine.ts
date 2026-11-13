@@ -163,7 +163,7 @@ export async function handleEngineEstimateTokens(
     }
     const processed = toProcessedFiles(hydrated);
     const est = estimateCombinedTokensByStyle(processed, {
-      includeToc,
+      addTableOfContents: includeToc,
       includeLineNumbers,
     });
     return {
