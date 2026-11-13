@@ -17,7 +17,7 @@ pub mod tokens;
 pub mod types;
 
 use crate::graph::build_codebase_dependency_graph;
-use crate::parser::{extract_symbols_from_file, validate_file_syntax};
+use crate::parser::extract_symbols_from_file;
 use crate::search::search_codebase;
 use crate::tokens::{count_lines, estimate_combined_tokens_by_style};
 use crate::types::{

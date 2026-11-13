@@ -94,6 +94,7 @@ export function loadNativeRustAddon(
     ...extraDirs,
     pkgDir,
     path.join(pkgDir, "target", "release"),
+    path.join(pkgDir, "..", "..", "target", "release"),
     path.join(pkgDir, "dist"),
     process.cwd(),
   ];
