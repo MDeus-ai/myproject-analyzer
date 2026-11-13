@@ -22,3 +22,5 @@ Thumbs.db
 # Electron packaging output (build artifacts — never commit)
 apps/desktop/release/
 apps/desktop/renderer/
+
+.perf-dist/

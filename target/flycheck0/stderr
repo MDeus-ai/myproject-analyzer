@@ -1,0 +1,4 @@
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   D:\PROJECTS (ROOT)\PROJECTS\SOFTWARE\myproject-analyzer\packages\rust-engine\Cargo.toml
+workspace: D:\PROJECTS (ROOT)\PROJECTS\SOFTWARE\myproject-analyzer\Cargo.toml
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s
